@@ -38,6 +38,17 @@ Click Allow when the per-attach popup appears (Chrome 144+):
 
 See [agent-workspace/domain-skills/](agent-workspace/domain-skills/) for example tasks.
 
+## Install as a Claude Code plugin
+
+browser-harness is also available from the Browser Use plugin marketplace for Claude Code:
+
+```bash
+claude plugin marketplace add browser-use/plugins
+claude plugin install browser-harness@browser-use
+```
+
+This installs the browser-harness skill into Claude Code. The harness CLI itself is a one-time install prerequisite — the skill walks you through it (clone + `uv tool install`, then connect to your browser) on first use.
+
 ## Free Browser Use Cloud browsers
 
 Stealth, sub-agents, or headless deployment.<br>
