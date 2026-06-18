@@ -40,7 +40,7 @@ Typical usage:
   PY
 
 Helpers are pre-imported. The daemon auto-starts and connects to the running browser.
-For local Chrome, first choose a stable profile id with list_local_profiles() and use_local_profile(id).
+For local Chrome, first choose a stable profile id with browser_profiles() and browser_use_profile(id).
 
 Commands:
   browser-harness --version        print the installed version
@@ -70,6 +70,8 @@ _MANAGER_HELPER_NAMES = (
 )
 
 _NO_DAEMON_HELPER_NAMES = {
+    "browser_profiles",
+    "browser_use_profile",
     "list_local_profiles",
     "use_local_profile",
     "open_local_profile",
@@ -127,7 +129,7 @@ def _can_run_without_daemon(code: str) -> bool:
             return False
         if isinstance(func, ast.Attribute):
             # Allow simple formatting around passive helper output, e.g.
-            # json.dumps(list_local_profiles()).
+            # json.dumps(browser_profiles()).
             if func.attr in {"dumps", "loads"}:
                 continue
             return False

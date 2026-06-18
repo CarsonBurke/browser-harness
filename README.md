@@ -54,6 +54,8 @@ Stealth, sub-agents, or headless deployment.<br>
 - `agent-workspace/agent_helpers.py` — helper code the agent edits
 - `agent-workspace/domain-skills/` — reusable site-specific skills the agent edits
 
+Plain `browser-harness` helper calls use the selected local browser profile. For isolated or cloud work, start with `browser_new("private")` or `browser_new("cloud")`; cloud responses include a `live_url` preview when available.
+
 ## Contributing
 
 PRs and improvements welcome. The best way to help: **contribute a new domain skill** under [agent-workspace/domain-skills/](agent-workspace/domain-skills/) for a site or task you use often (LinkedIn outreach, ordering on Amazon, filing expenses, etc.). Each skill teaches the agent the selectors, flows, and edge cases it would otherwise have to rediscover.

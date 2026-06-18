@@ -42,6 +42,38 @@ def test_manager_helper_call_enables_manager_mode_without_env(monkeypatch):
     assert "BH_MANAGER_MODE" in os.environ
 
 
+def test_browser_profiles_runs_without_daemon(monkeypatch):
+    stdout = StringIO()
+    fake_stdin = StringIO("print(browser_profiles())")
+
+    with patch.object(sys, "argv", ["browser-harness"]), \
+         patch("sys.stdin", fake_stdin), \
+         patch("sys.stdout", stdout), \
+         patch("browser_harness.run.print_update_banner"), \
+         patch("browser_harness.run.ensure_daemon") as ensure_daemon, \
+         patch("browser_harness.run.browser_profiles", lambda: {"profiles": []}):
+        run.main()
+
+    ensure_daemon.assert_not_called()
+    assert stdout.getvalue().strip() == "{'profiles': []}"
+
+
+def test_browser_use_profile_runs_without_daemon(monkeypatch):
+    stdout = StringIO()
+    fake_stdin = StringIO("print(browser_use_profile('google-chrome:Default'))")
+
+    with patch.object(sys, "argv", ["browser-harness"]), \
+         patch("sys.stdin", fake_stdin), \
+         patch("sys.stdout", stdout), \
+         patch("browser_harness.run.print_update_banner"), \
+         patch("browser_harness.run.ensure_daemon") as ensure_daemon, \
+         patch("browser_harness.run.browser_use_profile", lambda profile_id: {"selected": profile_id}):
+        run.main()
+
+    ensure_daemon.assert_not_called()
+    assert stdout.getvalue().strip() == "{'selected': 'google-chrome:Default'}"
+
+
 def test_manager_mode_releases_execution_lock_on_exception(monkeypatch):
     monkeypatch.setenv("BH_MANAGER_SOCKET", "/tmp/nonexistent-manager.sock")
     fake_stdin = StringIO("raise RuntimeError('boom')")

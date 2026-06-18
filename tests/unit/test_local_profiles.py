@@ -57,6 +57,29 @@ def test_default_profile_file_roundtrip(tmp_path, monkeypatch):
     assert local_profiles.get_default_profile_id() == "google-chrome:Default"
 
 
+def test_browser_profiles_payload_is_concise_by_default(tmp_path, monkeypatch):
+    install = _install(tmp_path)
+    monkeypatch.setenv("BH_CONFIG_DIR", str(tmp_path / "config"))
+    monkeypatch.setattr(local_profiles, "known_local_browser_installs", lambda: [install])
+    local_profiles.set_default_profile_id("google-chrome:Default")
+
+    assert local_profiles.list_browser_profiles_payload() == {
+        "selected": "google-chrome:Default",
+        "profiles": [
+            {
+                "id": "google-chrome:Default",
+                "label": "Google Chrome - Greg",
+                "selected": True,
+            },
+            {
+                "id": "google-chrome:Profile 1",
+                "label": "Google Chrome - Work",
+                "selected": False,
+            },
+        ],
+    }
+
+
 def test_default_profile_rejects_missing_browser_binary(tmp_path, monkeypatch):
     install = _install(tmp_path)
     install.browser_path.unlink()

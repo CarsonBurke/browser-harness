@@ -50,6 +50,74 @@ def test_browser_new_activates_binding_and_acquires_lock(monkeypatch, tmp_path):
     assert acquired == ["br_123"]
 
 
+def test_browser_new_private_maps_to_managed_backend(monkeypatch, tmp_path):
+    calls = []
+    old = context.get_active_binding()
+    try:
+        monkeypatch.setattr(
+            manager_helpers.manager_client,
+            "new_browser",
+            lambda *args, **kwargs: calls.append((args, kwargs)) or _manager_response(tmp_path),
+        )
+        monkeypatch.setattr(manager_helpers.manager_client, "acquire_execution_for_binding", lambda binding: None)
+
+        manager_helpers.browser_new("private", reason="test")
+    finally:
+        if old is not None:
+            context.activate_binding(old)
+        else:
+            context.clear_active_binding()
+
+    assert calls[0][1]["backend"] == "managed"
+
+
+def test_browser_new_cloud_maps_to_cloud_backend(monkeypatch, tmp_path):
+    calls = []
+    old = context.get_active_binding()
+    try:
+        monkeypatch.setattr(
+            manager_helpers.manager_client,
+            "new_browser",
+            lambda *args, **kwargs: calls.append((args, kwargs)) or _manager_response(tmp_path),
+        )
+        monkeypatch.setattr(manager_helpers.manager_client, "acquire_execution_for_binding", lambda binding: None)
+
+        manager_helpers.browser_new("cloud")
+    finally:
+        if old is not None:
+            context.activate_binding(old)
+        else:
+            context.clear_active_binding()
+
+    assert calls[0][1]["backend"] == "cloud"
+
+
+def test_browser_profiles_returns_concise_payload(monkeypatch):
+    monkeypatch.setattr(
+        manager_helpers.local_profiles,
+        "list_browser_profiles_payload",
+        lambda verbose=False: {"selected": "google-chrome:Default", "profiles": []},
+    )
+
+    assert manager_helpers.browser_profiles() == {
+        "selected": "google-chrome:Default",
+        "profiles": [],
+    }
+
+
+def test_browser_use_profile_returns_selected_profile(monkeypatch):
+    monkeypatch.setattr(
+        manager_helpers.local_profiles,
+        "use_browser_profile",
+        lambda profile_id: {"selected": profile_id, "label": "Google Chrome - Default"},
+    )
+
+    assert manager_helpers.browser_use_profile("google-chrome:Default") == {
+        "selected": "google-chrome:Default",
+        "label": "Google Chrome - Default",
+    }
+
+
 def test_browser_switch_does_not_activate_binding_when_lock_fails(monkeypatch, tmp_path):
     old = context.get_active_binding()
     previous = context.BrowserBinding(

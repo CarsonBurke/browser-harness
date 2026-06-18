@@ -216,10 +216,11 @@ class Daemon:
             return None
         profile_id = local_profiles.get_default_profile_id()
         if not profile_id:
-            profiles = local_profiles.list_local_profiles_payload()
+            profiles = local_profiles.list_browser_profiles_payload()
             raise RuntimeError(
                 "needs-profile: No default local Chrome profile is set. "
-                f"Choose one explicit profile first. profiles={json.dumps(profiles, default=str)}"
+                "Run browser_profiles(), ask the user which profile id to use, then run browser_use_profile(id). "
+                f"profiles={json.dumps(profiles, default=str)}"
             )
         profile = local_profiles.resolve_local_profile(profile_id)
         if local_profiles.remote_debugging_user_enabled(profile.user_data_dir) is False:
@@ -427,7 +428,7 @@ class Daemon:
                 raise RuntimeError(
                     f"CDP WS handshake failed: {e} -- remote browser WebSocket connection failed. "
                     "This can happen when network policy blocks the connection, the WS URL is wrong or expired, or the remote endpoint is down. "
-                    "If you use Browser Use cloud, verify BROWSER_USE_API_KEY and get a fresh URL via start_remote_daemon()."
+                    "If you use Browser Use cloud, verify auth and start a fresh cloud browser."
                 )
             raise RuntimeError(f"CDP WS handshake failed: {e} -- click Allow in Chrome if prompted, then retry")
         await self.attach_first_page()

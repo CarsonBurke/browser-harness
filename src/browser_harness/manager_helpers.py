@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from . import context
+from . import local_profiles
 from . import manager_client
 
 
@@ -10,10 +11,29 @@ def browser_status():
     return manager_client.status()
 
 
-def browser_new(backend="managed", *, profile="clean", proxy_country=None, reason=None):
+def browser_profiles(verbose=False):
+    """List local Chrome/Chromium profiles for browser_use_profile(...)."""
+    return local_profiles.list_browser_profiles_payload(verbose=verbose)
+
+
+def browser_use_profile(profile_id):
+    """Select the local browser profile future normal helper calls should use."""
+    return local_profiles.use_browser_profile(profile_id)
+
+
+def _manager_backend(kind, backend=None):
+    value = backend if backend is not None else kind
+    if value in (None, "private", "managed"):
+        return "managed"
+    if value == "cloud":
+        return "cloud"
+    raise ValueError("browser_new kind must be 'private' or 'cloud'")
+
+
+def browser_new(kind="private", *, backend=None, profile="clean", proxy_country=None, reason=None):
     """Create a browser, switch this agent to it, and return concise state."""
     resp = manager_client.new_browser(
-        backend=backend,
+        backend=_manager_backend(kind, backend),
         profile=profile,
         proxy_country=proxy_country,
         reason=reason,

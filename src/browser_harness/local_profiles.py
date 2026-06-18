@@ -288,6 +288,31 @@ def list_local_profiles_payload() -> dict:
     }
 
 
+def list_browser_profiles_payload(verbose: bool = False) -> dict:
+    if verbose:
+        return list_local_profiles_payload()
+    selected = get_default_profile_id()
+    return {
+        "selected": selected,
+        "profiles": [
+            {
+                "id": p.id,
+                "label": p.display_name,
+                "selected": p.id == selected,
+            }
+            for p in detect_local_profiles()
+        ],
+    }
+
+
+def use_browser_profile(profile_id: str) -> dict:
+    data = set_default_profile_id(profile_id)
+    return {
+        "selected": data.get("default_local_profile_id"),
+        "label": data.get("default_local_profile_label"),
+    }
+
+
 def resolve_local_profile(profile_ref: str | None = None) -> LocalBrowserProfile:
     profile_ref = (profile_ref or get_default_profile_id() or "").strip()
     if not profile_ref:
@@ -303,7 +328,7 @@ def resolve_local_profile(profile_ref: str | None = None) -> LocalBrowserProfile
     if len(matches) == 1:
         return matches[0]
     if not matches:
-        raise RuntimeError(f"no local profile matched {profile_ref!r}; run list_local_profiles()")
+        raise RuntimeError(f"no local profile matched {profile_ref!r}; run browser_profiles()")
     raise RuntimeError(f"multiple local profiles matched {profile_ref!r}; pass the exact profile id")
 
 
