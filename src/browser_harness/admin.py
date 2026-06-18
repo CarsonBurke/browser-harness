@@ -9,6 +9,7 @@ import urllib.request
 from pathlib import Path
 
 from . import _ipc as ipc
+from . import context
 
 
 def _process_start_time(pid):
@@ -130,9 +131,35 @@ VERSION_CACHE_TTL = 24 * 3600
 DOCTOR_TEXT_LIMIT = 140
 
 
-def _log_tail(name):
+def _binding_parts(binding=None):
+    if binding is None:
+        return None, None, None
+    return binding.bu_name, binding.runtime_dir, binding.tmp_dir
+
+
+def _ipc_pid_path(name, runtime_dir=None):
+    return ipc.pid_path(name) if runtime_dir is None else ipc.pid_path(name, runtime_dir=runtime_dir)
+
+
+def _ipc_connect(name, timeout=1.0, runtime_dir=None):
+    return ipc.connect(name, timeout=timeout) if runtime_dir is None else ipc.connect(name, timeout=timeout, runtime_dir=runtime_dir)
+
+
+def _ipc_ping(name, timeout=1.0, runtime_dir=None):
+    return ipc.ping(name, timeout=timeout) if runtime_dir is None else ipc.ping(name, timeout=timeout, runtime_dir=runtime_dir)
+
+
+def _ipc_identify(name, timeout=1.0, runtime_dir=None):
+    return ipc.identify(name, timeout=timeout) if runtime_dir is None else ipc.identify(name, timeout=timeout, runtime_dir=runtime_dir)
+
+
+def _ipc_cleanup_endpoint(name, runtime_dir=None):
+    return ipc.cleanup_endpoint(name) if runtime_dir is None else ipc.cleanup_endpoint(name, runtime_dir=runtime_dir)
+
+
+def _log_tail(name, tmp_dir=None):
     try:
-        return ipc.log_path(name or NAME).read_text().strip().splitlines()[-1]
+        return ipc.log_path(name or NAME, tmp_dir=tmp_dir).read_text().strip().splitlines()[-1]
     except (FileNotFoundError, IndexError):
         return None
 
@@ -161,10 +188,11 @@ def _is_local_chrome_mode(env=None):
     return not (env or {}).get("BU_CDP_WS") and not os.environ.get("BU_CDP_WS")
 
 
-def daemon_alive(name=None):
+def daemon_alive(name=None, binding=None):
     # Ping handshake (not a bare connect) so a stale .port file + port reuse
     # after a daemon crash doesn't make us mistake an unrelated listener for ours.
-    return ipc.ping(name or NAME, timeout=1.0)
+    b_name, runtime_dir, _tmp_dir = _binding_parts(binding)
+    return _ipc_ping(name or b_name or NAME, timeout=1.0, runtime_dir=runtime_dir)
 
 
 def _daemon_endpoint_names():
@@ -295,19 +323,23 @@ def run_doctor_fix_snap():
     return 0
 
 
-def ensure_daemon(wait=60.0, name=None, env=None):
+def ensure_daemon(wait=60.0, name=None, env=None, binding=None):
     """Idempotent. Self-heals stale daemon, cold Chrome, and missing Allow on chrome://inspect."""
-    if daemon_alive(name):
+    b_name, runtime_dir, tmp_dir = _binding_parts(binding)
+    name = name or b_name
+    binding_env = binding.daemon_env() if binding else {}
+    env = {**binding_env, **(env or {})}
+    if daemon_alive(name, binding=binding):
         # Stale daemons accept connects AND reply to meta:* (pure Python) even when the
         # CDP WS to Chrome is dead — probe with a real CDP call and require "result".
         # Must go through ipc.connect so this works on Windows (TCP loopback) too;
         # raw AF_UNIX here would fail on every warm call and churn the daemon.
         try:
-            s, token = ipc.connect(name or NAME, timeout=3.0)
+            s, token = _ipc_connect(name or NAME, timeout=3.0, runtime_dir=runtime_dir)
             resp = ipc.request(s, token, {"method": "Target.getTargets", "params": {}})
             if "result" in resp: return
         except Exception: pass
-        restart_daemon(name)
+        restart_daemon(name, binding=binding)
 
     import subprocess, sys
     local = _is_local_chrome_mode(env)
@@ -319,16 +351,16 @@ def ensure_daemon(wait=60.0, name=None, env=None):
         )
         deadline = time.time() + wait
         while time.time() < deadline:
-            if daemon_alive(name): return
+            if daemon_alive(name, binding=binding): return
             if p.poll() is not None: break
             time.sleep(0.2)
-        msg = _log_tail(name) or ""
+        msg = _log_tail(name, tmp_dir=tmp_dir) or ""
         if local and attempt == 0 and _needs_chrome_remote_debugging_prompt(msg):
             _open_chrome_inspect()
             print('browser-harness: at chrome://inspect/#remote-debugging, tick "Allow remote debugging for this browser instance" and click Allow on the popup that appears', file=sys.stderr)
-            restart_daemon(name)
+            restart_daemon(name, binding=binding)
             continue
-        raise RuntimeError(msg or f"daemon {name or NAME} didn't come up -- check {ipc.log_path(name or NAME)}")
+        raise RuntimeError(msg or f"daemon {name or NAME} didn't come up -- check {ipc.log_path(name or NAME, tmp_dir=tmp_dir)}")
 
 
 def stop_remote_daemon(name="remote"):
@@ -345,7 +377,7 @@ def stop_remote_daemon(name="remote"):
     restart_daemon(name)
 
 
-def restart_daemon(name=None):
+def restart_daemon(name=None, binding=None):
     """Best-effort daemon shutdown + socket/pid cleanup.
 
     Name is historical: callers typically follow this with another
@@ -359,8 +391,9 @@ def restart_daemon(name=None):
     """
     import signal
 
-    name = name or NAME
-    pid_path = str(ipc.pid_path(name))
+    b_name, runtime_dir, _tmp_dir = _binding_parts(binding)
+    name = name or b_name or NAME
+    pid_path = str(_ipc_pid_path(name, runtime_dir=runtime_dir))
 
     # Two pieces of information are tracked separately:
     #   - daemon_pid: the daemon's self-reported PID, or None. Only daemons
@@ -370,8 +403,8 @@ def restart_daemon(name=None):
     #     IPC path working across upgrades — without it, a still-running
     #     pre-upgrade daemon would have its socket deleted out from under it
     #     while the process stayed alive.
-    daemon_pid = ipc.identify(name, timeout=5.0)
-    daemon_alive = daemon_pid is not None or ipc.ping(name, timeout=1.0)
+    daemon_pid = _ipc_identify(name, timeout=5.0, runtime_dir=runtime_dir)
+    daemon_alive = daemon_pid is not None or _ipc_ping(name, timeout=1.0, runtime_dir=runtime_dir)
     # Snapshot the daemon's process start-time as a secondary identity check.
     # The IPC socket can disappear before the process exits (e.g. the shutdown
     # path tears down the socket and then waits on a slow remote `stop` PATCH),
@@ -383,7 +416,7 @@ def restart_daemon(name=None):
 
     if daemon_alive:
         try:
-            c, token = ipc.connect(name, timeout=5.0)
+            c, token = _ipc_connect(name, timeout=5.0, runtime_dir=runtime_dir)
             ipc.request(c, token, {"meta": "shutdown"})
             c.close()
         except Exception:
@@ -405,7 +438,7 @@ def restart_daemon(name=None):
             #      same process, just slow to exit (e.g. stuck in remote stop).
             #      The IPC may already be gone; that's expected.
             # If neither holds, the PID may have been reused; skip SIGTERM.
-            verified_pid = ipc.identify(name, timeout=1.0)
+            verified_pid = _ipc_identify(name, timeout=1.0, runtime_dir=runtime_dir)
             same_process = verified_pid == daemon_pid or (
                 daemon_start is not None
                 and _process_start_time(daemon_pid) == daemon_start
@@ -416,7 +449,7 @@ def restart_daemon(name=None):
                 except (ProcessLookupError, OSError, SystemError, OverflowError):
                     pass
 
-    ipc.cleanup_endpoint(name)
+    _ipc_cleanup_endpoint(name, runtime_dir=runtime_dir)
     try:
         os.unlink(pid_path)
     except FileNotFoundError:

@@ -1,4 +1,4 @@
-import os, sys, urllib.request
+import ast, os, sys, urllib.request
 
 # Windows default stdout encoding is cp1252, which can't encode the 🐴 marker
 # helpers prepend to tab titles (or anything else outside Latin-1). Force UTF-8
@@ -23,7 +23,9 @@ from .admin import (
     stop_remote_daemon,
     sync_local_profile,
 )
+from . import context, manager_client
 from .helpers import *
+from .manager_helpers import *
 
 HELP = """Browser Harness
 
@@ -51,6 +53,28 @@ USAGE = """Usage:
   print(page_info())
   PY
 """
+
+_MANAGER_HELPER_NAMES = (
+    "browser_status",
+    "browser_new",
+    "browser_switch",
+    "browser_list",
+    "browser_close",
+)
+
+
+def _uses_manager_helpers(code: str) -> bool:
+    try:
+        tree = ast.parse(code)
+    except SyntaxError:
+        return False
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        func = node.func
+        if isinstance(func, ast.Name) and func.id in _MANAGER_HELPER_NAMES:
+            return True
+    return False
 
 
 # Probe /json/version (not a bare TCP connect) so a non-Chrome process bound to
@@ -109,6 +133,18 @@ def main():
     else:
         sys.exit(USAGE)
     print_update_banner()
+    if context.manager_enabled() or _uses_manager_helpers(code):
+        os.environ.setdefault("BH_MANAGER_MODE", "1")
+        if os.environ.get("BH_BROWSER_ID"):
+            browser_switch(os.environ["BH_BROWSER_ID"])
+        else:
+            context.clear_active_binding()
+        try:
+            exec(code, globals())
+        finally:
+            manager_client.release_active_execution_lock()
+        return
+
     # Auto-bootstrap a cloud browser is opt-in via BU_AUTOSPAWN — BROWSER_USE_API_KEY alone
     # is not enough, since the key is commonly set for unrelated reasons (profile sync,
     # cloud API calls, parent agents managing their own session). An explicit BU_CDP_URL

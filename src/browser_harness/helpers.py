@@ -8,6 +8,7 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 from . import _ipc as ipc
+from . import context
 
 
 CORE_DIR = Path(__file__).resolve().parent
@@ -40,7 +41,8 @@ INTERNAL = ("chrome://", "chrome-untrusted://", "devtools://", "chrome-extension
 
 
 def _send(req):
-    c, token = ipc.connect(NAME, timeout=5.0)
+    binding = context.require_active_binding()
+    c, token = ipc.connect(binding.bu_name, timeout=5.0, runtime_dir=binding.runtime_dir)
     try:
         r = ipc.request(c, token, req)
     finally:
@@ -269,7 +271,12 @@ def scroll(x, y, dy=-300, dx=0):
 def capture_screenshot(path=None, full=False, max_dim=None):
     """Save a PNG of the current viewport. Set max_dim=1800 on a 2× display to
     keep the file under the 2000px-per-side limit some image-aware LLMs enforce."""
-    path = path or str(ipc._TMP / "shot.png")
+    if path is None:
+        binding = context.get_active_binding()
+        if binding and binding.manager_mode:
+            path = str(context.active_artifact_dir() / "shot.png")
+        else:
+            path = str(ipc._TMP / "shot.png")
     r = cdp("Page.captureScreenshot", format="png", captureBeyondViewport=full)
     open(path, "wb").write(base64.b64decode(r["data"]))
     if max_dim:

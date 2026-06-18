@@ -1,6 +1,6 @@
 ---
 name: browser
-description: Direct browser control via CDP. Use when the user wants to automate, scrape, test, or interact with web pages. Connects to the user's already-running Chrome.
+description: Direct browser control via CDP. Use when the user wants to automate, scrape, test, or interact with web pages. Connects to Chrome, Chromium, or a manager-created cloud browser.
 ---
 
 # browser-harness
@@ -33,7 +33,30 @@ browser-harness <<'PY'
 PY
 ```
 
-run.py calls ensure_daemon() before exec — you never start/stop manually unless you want to.
+Legacy mode calls ensure_daemon() before exec. Manager mode starts when the script uses a `browser_*` lifecycle helper or `BH_MANAGER_MODE=1`.
+
+### Managed browsers
+
+Use this when you need an isolated browser, parallel sub-agents, a cloud browser, or a restart after the current browser gets blocked.
+
+```bash
+browser-harness <<'PY'
+print(browser_status())
+print(browser_new(backend="cloud", proxy_country="us"))
+new_tab("https://example.com")
+print(page_info())
+print(browser_close())
+PY
+```
+
+Lifecycle helpers:
+- `browser_status()` — current binding state.
+- `browser_new(backend="cloud"|"managed", profile="clean", proxy_country=None, reason=None)` — create and switch to a browser.
+- `browser_list()` — browser ids visible to this run/agent.
+- `browser_switch(browser_id)` — reuse an existing browser id.
+- `browser_close(browser_id=None)` — close the active private browser, or release access to a shared one.
+
+After `browser_new(...)` or `browser_switch(...)`, all normal page helpers work unchanged. If you are a sub-agent, create your own browser unless the parent gives you a browser id to reuse with `browser_switch(id)`.
 
 ### Remote browsers
 
@@ -95,11 +118,11 @@ If you start struggling with a specific mechanic while navigating, look in inter
 ## Design constraints
 
 - Coordinate clicks default. Input.dispatchMouseEvent goes through iframes/shadow/cross-origin at the compositor level.
-- Connect to the user's running Chrome. Don't launch your own browser.
+- Legacy mode connects to the user's running Chrome. Manager mode may create cloud or managed browsers via `browser_new`.
 - cdp-use is only for CDPClient.send_raw. Prefer raw CDP strings over typed wrappers.
 - run.py stays tiny. No argparse, subcommands, or extra control layer.
 - Core helpers stay short. Put task-specific helper additions in `agent-workspace/agent_helpers.py`; daemon/bootstrap and remote session admin live in the core package.
-- Don't add a manager layer. No retries framework, session manager, daemon supervisor, config system, or logging framework.
+- Don't add another manager layer. Use the built-in `browser_*` lifecycle helpers.
 
 ## Gotchas (field-tested)
 
