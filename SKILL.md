@@ -58,9 +58,23 @@ Lifecycle helpers:
 
 After `browser_new(...)` or `browser_switch(...)`, all normal page helpers work unchanged. If you are a sub-agent, create your own browser unless the parent gives you a browser id to reuse with `browser_switch(id)`.
 
-### Remote browsers
+If `browser_new(backend="cloud")` reports `cloud-auth-required`, run:
 
-Use remote for parallel sub-agents (each gets its own isolated browser via a distinct BU_NAME) or on a headless server. BROWSER_USE_API_KEY must be set. start_remote_daemon, list_cloud_profiles, list_local_profiles, sync_local_profile are pre-imported.
+```bash
+browser-harness auth login
+```
+
+It prints/opens a Browser Use login URL and waits while the user logs in online. The API key is stored locally and is never printed. In SSH/headless environments use:
+
+```bash
+browser-harness auth login --device-code
+```
+
+Then retry `browser_new(backend="cloud")`.
+
+### Legacy remote browsers
+
+Prefer `browser_new(backend="cloud")` for new work. The older named-daemon remote API is still available for advanced/manual cases. BROWSER_USE_API_KEY must be set or `browser-harness auth login` must have been completed. start_remote_daemon, list_cloud_profiles, list_local_profiles, sync_local_profile are pre-imported.
 
 ```bash
 browser-harness <<'PY'

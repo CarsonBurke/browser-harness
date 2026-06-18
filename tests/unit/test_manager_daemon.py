@@ -1,4 +1,17 @@
 from browser_harness.manager_daemon import Manager
+from browser_harness import manager_daemon
+from browser_harness import auth
+
+
+class _FakeResponse:
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_args):
+        return False
+
+    def read(self):
+        return b'{"ok": true}'
 
 
 def _manager_with_lease(tmp_path):
@@ -76,3 +89,38 @@ def test_close_rejects_other_runs(tmp_path):
     assert resp["ok"] is False
     assert resp["state"] == "forbidden"
     assert lease.browser_id in manager.leases
+
+
+def test_cloud_new_reports_auth_required(monkeypatch, tmp_path):
+    manager = Manager(tmp_path)
+    monkeypatch.setattr(
+        "browser_harness.manager_daemon.auth.get_browser_use_api_key",
+        lambda: (_ for _ in ()).throw(auth.CloudAuthRequired()),
+    )
+
+    resp = manager.handle({
+        "op": "new",
+        "run_id": "run-1",
+        "agent_id": "agent-1",
+        "backend": "cloud",
+    })
+
+    assert resp["ok"] is False
+    assert resp["state"] == "cloud-auth-required"
+    assert "browser-harness auth login" in resp["reason"]
+
+
+def test_browser_use_api_uses_auth_resolution(monkeypatch):
+    captured = []
+    monkeypatch.delenv("BROWSER_USE_API_KEY", raising=False)
+    monkeypatch.setattr(manager_daemon.auth, "get_browser_use_api_key", lambda: "stored-key")
+    monkeypatch.setattr(
+        manager_daemon.urllib.request,
+        "urlopen",
+        lambda req, timeout=60: captured.append(req) or _FakeResponse(),
+    )
+
+    assert manager_daemon._browser_use("/browsers", "POST", {}) == {"ok": True}
+
+    assert captured
+    assert captured[0].get_header("X-browser-use-api-key") == "stored-key"

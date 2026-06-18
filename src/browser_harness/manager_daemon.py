@@ -16,7 +16,7 @@ import threading
 import time
 import urllib.request
 
-from . import admin, context
+from . import admin, auth, context
 
 
 BU_API = "https://api.browser-use.com/api/v3"
@@ -157,6 +157,9 @@ class Manager:
                 start_cloud_backend(lease, req.get("proxy_country"))
             else:
                 start_managed_backend(lease)
+        except auth.CloudAuthRequired as e:
+            cleanup_backend(lease)
+            return error("cloud-auth-required", str(e), ["browser-harness auth login"])
         except Exception as e:
             cleanup_backend(lease)
             return error("browser-start-failed", str(e), ["browser_new"])
@@ -285,9 +288,7 @@ class Manager:
 
 
 def start_cloud_backend(lease: BrowserLease, proxy_country: str | None):
-    key = os.environ.get("BROWSER_USE_API_KEY")
-    if not key:
-        raise RuntimeError("BROWSER_USE_API_KEY is not set")
+    auth.get_browser_use_api_key()
     body = {}
     if proxy_country:
         body["proxyCountryCode"] = proxy_country
@@ -370,9 +371,7 @@ def cleanup_backend(lease: BrowserLease):
 
 
 def _browser_use(path: str, method: str, body=None):
-    key = os.environ.get("BROWSER_USE_API_KEY")
-    if not key:
-        raise RuntimeError("BROWSER_USE_API_KEY is not set")
+    key = auth.get_browser_use_api_key()
     req = urllib.request.Request(
         f"{BU_API}{path}",
         method=method,

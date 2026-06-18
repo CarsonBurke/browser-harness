@@ -61,6 +61,38 @@ optional browser_harness.manager_daemon owns many isolated browser leases
 - BU_CDP_URL overrides local Chrome discovery with a specific DevTools HTTP endpoint (used for Way 2).
 - BU_BROWSER_ID + BROWSER_USE_API_KEY lets the daemon stop a Browser Use cloud browser on shutdown.
 - Manager mode auto-starts `browser-harness-manager` when `browser_status`, `browser_new`, `browser_list`, `browser_switch`, or `browser_close` is used.
+- Cloud manager mode reads Browser Use auth from `BROWSER_USE_API_KEY` first, then the local `browser-harness auth login` store.
+
+## Browser Use Cloud auth
+
+For cloud browsers, prefer OAuth login over pasting API keys:
+
+```bash
+browser-harness auth login
+```
+
+The command generates a PKCE login request, opens or prints a Browser Use login URL, waits for the local callback, exchanges the code for an API key, and stores it in a private local file. The key is never printed.
+
+Headless/SSH fallback:
+
+```bash
+browser-harness auth login --device-code
+```
+
+Other auth commands:
+
+```bash
+browser-harness auth status
+browser-harness auth logout
+```
+
+Key resolution order for cloud browser creation:
+
+```text
+BROWSER_USE_API_KEY
+  -> stored browser-harness auth key
+  -> cloud-auth-required
+```
 
 # Browser connection setup and troubleshooting
 
@@ -70,7 +102,7 @@ This section is the source of truth for how browser-harness connects to a browse
 
 Browser-harness can connect to any Chrome or Chromium-based browser on your computer, or to a Browser Use cloud browser.
 
-**Cloud browsers** are managed by the Browser Use cloud API. In manager mode, start one with `browser_new(backend="cloud", proxy_country="us")`; for legacy named daemons use `start_remote_daemon("work", ...)`. Authentication is via the `BROWSER_USE_API_KEY` environment variable; the harness handles the WebSocket URL itself. To carry your local Chrome cookies into a cloud browser, install `profile-use` once (`curl -fsSL https://browser-use.com/profile.sh | sh`), then call `uuid = sync_local_profile("MyChromeProfile")` followed by `start_remote_daemon("work", profileId=uuid)`. Cookies are the only thing synced — not localStorage, not extensions, not history.
+**Cloud browsers** are managed by the Browser Use cloud API. In manager mode, start one with `browser_new(backend="cloud", proxy_country="us")`; for legacy named daemons use `start_remote_daemon("work", ...)`. Authentication is via `BROWSER_USE_API_KEY` or `browser-harness auth login`; the harness handles the WebSocket URL itself. To carry your local Chrome cookies into a cloud browser, install `profile-use` once (`curl -fsSL https://browser-use.com/profile.sh | sh`), then call `uuid = sync_local_profile("MyChromeProfile")` followed by `start_remote_daemon("work", profileId=uuid)`. Cookies are the only thing synced — not localStorage, not extensions, not history.
 
 **Local browsers** require remote debugging to be enabled. There are two ways, and they suit different use cases.
 

@@ -28,6 +28,8 @@ browser_close(browser_id=None)
 
 After `browser_new(...)` or `browser_switch(...)`, normal browser-harness helpers such as `new_tab`, `page_info`, `capture_screenshot`, `click_at_xy`, `js`, and `cdp` work unchanged.
 
+For cloud browsers, missing auth should produce `cloud-auth-required`; the model should run `browser-harness auth login` and retry. The user logs in online and the API key is stored locally without being printed into chat.
+
 The model does not need to know about sockets, daemon names, runtime dirs, CDP URLs, Browser Use browser IDs, or process cleanup. Those are manager internals.
 
 ## Why Python Instead Of Rust
@@ -102,6 +104,8 @@ This keeps the LLM-visible protocol minimal and avoids requiring Codex runtime c
 The VM used for this work must not start local Chrome or Chromium. Local managed-browser code exists, but local startup was intentionally not smoke-tested here.
 
 Cloud/live lifecycle should be tested separately with a Browser Use API key in the environment. Do not commit keys or put them in docs.
+
+OAuth auth was added after this note was first created. Cloud lifecycle can now also be tested after `browser-harness auth login`, which stores a local Browser Use API key outside the repo.
 
 ## Verification Done In This Session
 

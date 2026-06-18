@@ -23,7 +23,7 @@ from .admin import (
     stop_remote_daemon,
     sync_local_profile,
 )
-from . import context, manager_client
+from . import auth, context, manager_client
 from .helpers import *
 from .manager_helpers import *
 
@@ -44,6 +44,10 @@ Commands:
   browser-harness --doctor         diagnose install, daemon, and browser state
   browser-harness doctor           same as --doctor
   browser-harness doctor --fix-snap   print how to fix Snap Chromium blocking CDP (Linux)
+  browser-harness auth login          sign in to Browser Use Cloud for cloud browsers
+  browser-harness auth login --device-code   sign in from SSH/headless environments
+  browser-harness auth status         show Browser Use Cloud auth state
+  browser-harness auth logout         remove stored Browser Use Cloud auth
   browser-harness --update [-y]    pull the latest version (agents: pass -y)
   browser-harness --reload         stop the daemon so next call picks up code changes
 """
@@ -116,6 +120,8 @@ def main():
             print("usage: browser-harness doctor [--fix-snap]", file=sys.stderr)
             sys.exit(2)
         sys.exit(run_doctor())
+    if args and args[0] == "auth":
+        sys.exit(auth.run_auth_cli(args[1:]))
     if args and args[0] == "--update":
         yes = any(a in {"-y", "--yes"} for a in args[1:])
         sys.exit(run_update(yes=yes))
