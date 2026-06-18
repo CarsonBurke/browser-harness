@@ -42,6 +42,27 @@ def test_manager_helper_call_enables_manager_mode_without_env(monkeypatch):
     assert "BH_MANAGER_MODE" in os.environ
 
 
+def test_browser_selector_call_enables_manager_mode(monkeypatch):
+    monkeypatch.delenv("BH_MANAGER_SOCKET", raising=False)
+    monkeypatch.delenv("BH_MANAGER_MODE", raising=False)
+    stdout = StringIO()
+    fake_stdin = StringIO("print(browser('abc123'))")
+    switched = []
+
+    with patch.object(sys, "argv", ["browser-harness"]), \
+         patch("sys.stdin", fake_stdin), \
+         patch("sys.stdout", stdout), \
+         patch("browser_harness.run.print_update_banner"), \
+         patch("browser_harness.run.ensure_daemon") as ensure_daemon, \
+         patch("browser_harness.run.browser", lambda browser_id: switched.append(browser_id) or {"id": browser_id}), \
+         patch("browser_harness.run.manager_client.release_active_execution_lock"):
+        run.main()
+
+    ensure_daemon.assert_not_called()
+    assert switched == ["abc123"]
+    assert stdout.getvalue().strip() == "{'id': 'abc123'}"
+
+
 def test_browser_profiles_runs_without_daemon(monkeypatch):
     stdout = StringIO()
     fake_stdin = StringIO("print(browser_profiles())")

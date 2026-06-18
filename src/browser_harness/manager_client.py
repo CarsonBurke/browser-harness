@@ -149,9 +149,9 @@ def binding_from_response(resp: dict) -> context.BrowserBinding:
     return context.BrowserBinding.from_manager(binding)
 
 
-def status() -> dict:
+def status(browser_id: str | None = None) -> dict:
     try:
-        return public_state(request("status"))
+        return public_state(request("status", browser_id=browser_id))
     except ManagerError as e:
         if e.response.get("state") == "manager-unavailable":
             return {"ready": False, "state": "manager-unavailable", "reason": str(e), "safe_actions": []}

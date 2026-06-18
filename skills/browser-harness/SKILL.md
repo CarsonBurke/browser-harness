@@ -5,7 +5,7 @@ description: Direct browser control via CDP — automate, scrape, test, or inter
 
 # browser-harness
 
-Direct browser control via CDP. You drive the user's real browser with Python helpers run through the `browser-harness` command.
+Direct browser control via CDP. You drive a selected browser with Python helpers run through the `browser-harness` command.
 
 ## Prerequisite (one-time — NOT part of the AI workflow)
 
@@ -13,18 +13,68 @@ This skill is instructions only. It assumes the `browser-harness` command is alr
 
 ## Usage
 
+Managed browsers have short explicit ids. Create or receive an id, then select it inside each script.
+
+Create and use a private browser:
+
 ```bash
 browser-harness <<'PY'
+b = browser_new("private")
+browser(b["id"])
 new_tab("https://docs.browser-use.com")
 wait_for_load()
+print({"id": b["id"], "page": page_info()})
+PY
+```
+
+Use an existing managed browser:
+
+```bash
+browser-harness <<'PY'
+browser("abc123")
 print(page_info())
 PY
 ```
 
+Inspect managed browsers:
+
+```bash
+browser-harness <<'PY'
+print(browser_list())
+print(browser_status("abc123"))
+PY
+```
+
+- `browser(id)` selects a browser for this script only. Do not rely on a current browser across separate shell commands.
+- `browser_list()` shows `state: "busy"` while a script is actively using that browser, including the current script.
 - Invoke as `browser-harness` — it's on `$PATH` after install. No `cd`, no `uv run`.
 - Use the heredoc form for every multi-line command. It prevents shell quote mangling inside Python strings and JavaScript snippets.
 - First navigation is `new_tab(url)`, not `goto_url(url)` — goto runs in the user's active tab and clobbers their work.
 - Helpers are pre-imported and the daemon auto-starts; you never start/stop it manually unless you want to.
+
+## Choose Browser
+
+- User's logged-in local Chrome: use normal helpers. If setup asks for a profile, run `browser_profiles()`, ask the user which `id` to use, then run `browser_use_profile(id)` and retry.
+- Isolated local browser: `browser_new("private")`, then keep the returned `id`.
+- Browser Use cloud browser with live view: `browser_new("cloud")`, then keep the returned `id`.
+- Managed browser page work: call `browser(id)` first in the script.
+- Subagent: if the parent gives an id, start browser scripts with `browser(id)` and do not close it unless asked.
+- Done with a private or cloud browser: `browser_close(id)`.
+
+## Browser Helpers
+
+```python
+browser_status(id)
+browser_profiles()
+browser_use_profile(profile_id)
+browser_new("private")
+browser_new("cloud")
+browser(id)
+browser_list()
+browser_close(id)
+```
+
+If `browser_new("cloud")` reports `cloud-auth-required`, run `browser-harness auth login`.
 
 ## What actually works
 
@@ -39,23 +89,6 @@ PY
 - **Raw CDP** for anything helpers don't cover: `cdp("Domain.method", params)`.
 
 After every meaningful action, re-screenshot before assuming it worked.
-
-## Remote / cloud browsers
-
-Use remote for parallel sub-agents (each gets an isolated browser via a distinct `BU_NAME`) or on a headless server. `BROWSER_USE_API_KEY` must be set.
-
-```bash
-browser-harness <<'PY'
-start_remote_daemon("work")   # clean cloud browser; profileName=/profileId= to reuse a logged-in profile
-PY
-
-BU_NAME=work browser-harness <<'PY'
-new_tab("https://example.com")
-print(page_info())
-PY
-```
-
-`start_remote_daemon` prints a `liveUrl` so the user can watch. Running remote daemons bill until timeout.
 
 ## Interaction skills (progressive disclosure)
 

@@ -35,12 +35,14 @@ Read SKILL.md for the default workflow and examples.
 
 Typical usage:
   browser-harness <<'PY'
+  browser("abc123")
   ensure_real_tab()
   print(page_info())
   PY
 
 Helpers are pre-imported. The daemon auto-starts and connects to the running browser.
-For local Chrome, first choose a stable profile id with browser_profiles() and browser_use_profile(id).
+Create a browser with browser_new("private") or browser_new("cloud"), then select it with browser(id).
+For local Chrome setup, first choose a stable profile id with browser_profiles() and browser_use_profile(id).
 
 Commands:
   browser-harness --version        print the installed version
@@ -57,11 +59,17 @@ Commands:
 
 USAGE = """Usage:
   browser-harness <<'PY'
+  browser("abc123")
   print(page_info())
+  PY
+
+  browser-harness <<'PY'
+  print(browser_new("private"))
   PY
 """
 
 _MANAGER_HELPER_NAMES = (
+    "browser",
     "browser_status",
     "browser_new",
     "browser_switch",

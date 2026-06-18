@@ -1,4 +1,5 @@
 from pathlib import Path
+import pytest
 
 from browser_harness import context, helpers
 
@@ -73,3 +74,16 @@ def test_agent_identity_uses_codex_thread_fallback(monkeypatch):
     assert ident.run_id == "thread-123"
     assert ident.agent_id == "main"
     assert ident.degraded is False
+
+
+def test_require_active_binding_explains_browser_selector():
+    old = context.get_active_binding()
+    context.clear_active_binding()
+    try:
+        with pytest.raises(RuntimeError, match='call browser\\("<id>"\\)'):
+            context.require_active_binding()
+    finally:
+        if old is not None:
+            context.activate_binding(old)
+        else:
+            context.clear_active_binding()

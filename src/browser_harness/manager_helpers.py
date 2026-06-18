@@ -6,9 +6,9 @@ from . import local_profiles
 from . import manager_client
 
 
-def browser_status():
-    """Return lifecycle state for the active browser binding."""
-    return manager_client.status()
+def browser_status(browser_id=None):
+    """Return lifecycle state for a browser id, or manager guidance if omitted."""
+    return manager_client.status(browser_id)
 
 
 def browser_profiles(verbose=False):
@@ -31,21 +31,18 @@ def _manager_backend(kind, backend=None):
 
 
 def browser_new(kind="private", *, backend=None, profile="clean", proxy_country=None, reason=None):
-    """Create a browser, switch this agent to it, and return concise state."""
+    """Create a managed browser and return its short id."""
     resp = manager_client.new_browser(
         backend=_manager_backend(kind, backend),
         profile=profile,
         proxy_country=proxy_country,
         reason=reason,
     )
-    binding = manager_client.binding_from_response(resp)
-    manager_client.acquire_execution_for_binding(binding)
-    context.activate_binding(binding)
     return manager_client.public_state(resp)
 
 
-def browser_switch(browser_id):
-    """Switch this agent/process to an existing allowed browser id."""
+def browser(browser_id):
+    """Select a managed browser id for this Python script."""
     resp = manager_client.switch_browser(browser_id)
     binding = manager_client.binding_from_response(resp)
     manager_client.acquire_execution_for_binding(binding)
@@ -53,15 +50,22 @@ def browser_switch(browser_id):
     return manager_client.public_state(resp)
 
 
+def browser_switch(browser_id):
+    """Compatibility alias for browser(id)."""
+    return browser(browser_id)
+
+
 def browser_list():
-    """List concise browser ids visible to this run/agent."""
+    """List concise browser ids known to the manager."""
     return manager_client.list_browsers()
 
 
 def browser_close(browser_id=None):
-    """Close private browsers or release this agent's access to shared browsers."""
+    """Close a browser by explicit id."""
+    if not browser_id:
+        raise ValueError("browser_close(id) requires a browser id")
     active = context.get_active_binding()
-    closing_active = browser_id is None or (active and active.browser_id == browser_id)
+    closing_active = active and active.browser_id == browser_id
     if closing_active:
         manager_client.release_active_execution_lock()
     resp = manager_client.close_browser(browser_id)

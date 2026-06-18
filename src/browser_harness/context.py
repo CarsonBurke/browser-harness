@@ -142,7 +142,7 @@ def clear_active_binding() -> None:
 def require_active_binding() -> BrowserBinding:
     binding = get_active_binding()
     if binding is None:
-        raise RuntimeError("no-active-browser: call browser_new(...) or browser_switch(browser_id) first")
+        raise RuntimeError('no-browser-selected: call browser("<id>") before page helpers')
     return binding
 
 

@@ -5,43 +5,67 @@ description: Control a browser with Python helpers. Use for web automation, scra
 
 # browser-harness
 
-There is one active browser. Normal page helpers act on it:
+Managed browsers have short explicit ids. Create or receive an id, then select it inside each script.
+
+Create and use a private browser:
 
 ```bash
 browser-harness <<'PY'
+b = browser_new("private")
+browser(b["id"])
 new_tab("https://docs.browser-use.com")
 wait_for_load()
+print({"id": b["id"], "page": page_info()})
+PY
+```
+
+Use an existing managed browser:
+
+```bash
+browser-harness <<'PY'
+browser("abc123")
 print(page_info())
 PY
 ```
 
-Use `browser_*` helpers only to choose, set up, or close the active browser.
+`browser(id)` selects a browser for this script only. Do not rely on a current browser across separate shell commands.
+
+Inspect managed browsers:
+
+```bash
+browser-harness <<'PY'
+print(browser_list())
+print(browser_status("abc123"))
+PY
+```
+
+`browser_list()` shows `state: "busy"` while a script is actively using that browser, including the current script.
 
 ## Choose Browser
 
 - User's logged-in local Chrome: use normal helpers. If setup asks for a profile, run `browser_profiles()`, ask the user which `id` to use, then run `browser_use_profile(id)` and retry.
-- Isolated local browser: `browser_new("private")`.
-- Browser Use cloud browser with live view: `browser_new("cloud")`.
-- Subagent: use `browser_new("private")` unless the parent gave you a `browser_id`.
-- Given a `browser_id`: `browser_switch(browser_id)`.
-- Done with a private or cloud browser: `browser_close()`.
+- Isolated local browser: `browser_new("private")`, then keep the returned `id`.
+- Browser Use cloud browser with live view: `browser_new("cloud")`, then keep the returned `id`.
+- Managed browser page work: call `browser(id)` first in the script.
+- Subagent: if the parent gives an id, start browser scripts with `browser(id)` and do not close it unless asked.
+- Done with a private or cloud browser: `browser_close(id)`.
 
 ## Browser Helpers
 
 ```python
-browser_status()
+browser_status(id)
 browser_profiles()
 browser_use_profile(profile_id)
 browser_new("private")
 browser_new("cloud")
+browser(id)
 browser_list()
-browser_switch(browser_id)
-browser_close()
+browser_close(id)
 ```
 
 `browser_profiles()` and `browser_use_profile(...)` are local setup calls. They do not start browser work.
 
-After `browser_new(...)` or `browser_switch(...)`, keep using the normal page helpers: `new_tab`, `page_info`, `capture_screenshot`, `click_at_xy`, `type_text`, `js`, and `cdp`.
+Inside one Python script, `browser(id)` attaches the process to that browser so normal page helpers work: `new_tab`, `page_info`, `capture_screenshot`, `click_at_xy`, `type_text`, `js`, and `cdp`.
 
 If `browser_new("cloud")` reports `cloud-auth-required`, run:
 
