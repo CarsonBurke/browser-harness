@@ -1,4 +1,5 @@
 import pytest
+from pathlib import Path
 
 from browser_harness import admin
 
@@ -252,6 +253,31 @@ def test_run_doctor_skips_snap_detect_on_non_linux(monkeypatch, capsys):
 
     out = capsys.readouterr().out
     assert "[snap-detect]" not in out
+
+
+def test_run_doctor_prints_source_path_and_mismatch_warning(monkeypatch, capsys):
+    monkeypatch.setattr(admin, "_version", lambda: "0.1.0")
+    monkeypatch.setattr(admin, "_install_mode", lambda: "git")
+    monkeypatch.setattr(admin, "_chrome_running", lambda: True)
+    monkeypatch.setattr(admin, "daemon_alive", lambda: True)
+    monkeypatch.setattr(admin, "browser_connections", lambda: [])
+    monkeypatch.setattr(admin, "_latest_release_tag", lambda: "0.1.0")
+    monkeypatch.setattr(admin, "_package_source_path", lambda: Path("/installed/src/browser_harness"))
+    monkeypatch.setattr(admin, "_doctor_source_mismatch", lambda: {
+        "cwd_source": "/checkout/src/browser_harness",
+        "package_source": "/installed/src/browser_harness",
+    })
+    monkeypatch.setattr("platform.system", lambda: "Darwin")
+    monkeypatch.setattr("shutil.which", lambda _cmd: None)
+    monkeypatch.delenv("BROWSER_USE_API_KEY", raising=False)
+
+    assert admin.run_doctor() == 0
+
+    out = capsys.readouterr().out
+    assert "source path       /installed/src/browser_harness" in out
+    assert "[source-mismatch]" in out
+    assert "Current directory contains: /checkout/src/browser_harness" in out
+    assert "Imported browser-harness from: /installed/src/browser_harness" in out
 
 
 def test_run_doctor_fix_snap_prints_steps(capsys):

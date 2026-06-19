@@ -221,6 +221,19 @@ def test_wait_for_element_non_visible_uses_simple_check():
 
 # --- tabs / profile contexts ---
 
+def test_new_tab_reuses_attached_blank_tab_for_url():
+    with patch("browser_harness.helpers.current_tab", return_value={"targetId": "blank-target", "url": "about:blank"}), \
+         patch("browser_harness.helpers.goto_url") as goto_url, \
+         patch("browser_harness.helpers.cdp") as cdp, \
+         patch("browser_harness.helpers.switch_tab") as switch_tab:
+        result = helpers.new_tab("https://example.test/")
+
+    assert result == "blank-target"
+    goto_url.assert_called_once_with("https://example.test/")
+    cdp.assert_not_called()
+    switch_tab.assert_not_called()
+
+
 def test_list_tabs_filters_to_current_browser_context():
     def fake_send(req):
         if req.get("meta") == "current_tab":

@@ -120,42 +120,13 @@ def _runtime_evaluate(expression, session_id=None, await_promise=False):
     return _runtime_value(r, expression)
 
 
-def _has_return_statement(expression):
-    i = 0
-    n = len(expression)
-    state = "code"
-    quote = ""
-    while i < n:
-        ch = expression[i]
-        nxt = expression[i + 1] if i + 1 < n else ""
-        if state == "code":
-            if ch in ("'", '"', "`"):
-                state = "string"; quote = ch; i += 1; continue
-            if ch == "/" and nxt == "/":
-                state = "line_comment"; i += 2; continue
-            if ch == "/" and nxt == "*":
-                state = "block_comment"; i += 2; continue
-            if expression.startswith("return", i):
-                before = expression[i - 1] if i > 0 else ""
-                after = expression[i + 6] if i + 6 < n else ""
-                if not (before == "_" or before.isalnum()) and not (after == "_" or after.isalnum()):
-                    return True
-            i += 1; continue
-        if state == "line_comment":
-            if ch == "\n":
-                state = "code"
-            i += 1; continue
-        if state == "block_comment":
-            if ch == "*" and nxt == "/":
-                state = "code"; i += 2; continue
-            i += 1; continue
-        if state == "string":
-            if ch == "\\":
-                i += 2; continue
-            if ch == quote:
-                state = "code"; quote = ""
-            i += 1; continue
-    return False
+def _wrap_js_function(expression):
+    return f"(function(){{{expression}}})()"
+
+
+def _is_illegal_return_error(exc):
+    return "Illegal return statement" in str(exc)
+
 
 
 # --- navigation / page ---
@@ -360,14 +331,13 @@ def new_tab(url="about:blank"):
     # Always create blank, then goto: passing url to createTarget races with
     # attach, so the brief about:blank is "complete" by the time the caller
     # polls and wait_for_load() returns before navigation actually starts.
-    binding = context.get_active_binding()
-    if url != "about:blank" and binding and binding.manager_mode:
+    if url != "about:blank":
         try:
             cur = current_tab()
             cur_url = cur.get("url") or ""
             if cur_url in ("", "about:blank") or cur_url.startswith("about:blank#"):
                 goto_url(url)
-                return cur["targetId"]
+                return cur.get("targetId") or cur.get("target_id")
         except Exception:
             pass
     params = {"url": "about:blank"}
@@ -491,13 +461,18 @@ def wait_for_network_idle(timeout=10.0, idle_ms=500):
 def js(expression, target_id=None):
     """Run JS in the attached tab (default) or inside an iframe target (via iframe_target()).
 
-    Expressions with top-level `return` are automatically wrapped in an IIFE, so both
-    `document.title` and `const x = 1; return x` are valid inputs.
+    Expressions are evaluated as-is first. If Chrome reports an illegal top-level
+    `return`, the snippet is retried inside a function wrapper, so both
+    `document.title` and `const x = 1; return x` work without mis-wrapping nested
+    functions that contain their own returns.
     """
     sid = cdp("Target.attachToTarget", targetId=target_id, flatten=True)["sessionId"] if target_id else None
-    if _has_return_statement(expression) and not expression.strip().startswith("("):
-        expression = f"(function(){{{expression}}})()"
-    return _runtime_evaluate(expression, session_id=sid, await_promise=True)
+    try:
+        return _runtime_evaluate(expression, session_id=sid, await_promise=True)
+    except RuntimeError as e:
+        if _is_illegal_return_error(e):
+            return _runtime_evaluate(_wrap_js_function(expression), session_id=sid, await_promise=True)
+        raise
 
 
 _KC = {"Enter": 13, "Tab": 9, "Escape": 27, "Backspace": 8, " ": 32, "ArrowLeft": 37, "ArrowUp": 38, "ArrowRight": 39, "ArrowDown": 40}

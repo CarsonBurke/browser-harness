@@ -384,6 +384,36 @@ def run_doctor_fix_snap():
     return 0
 
 
+def _package_source_path() -> Path:
+    return Path(__file__).resolve().parent
+
+
+def _cwd_browser_harness_source_path(cwd: str | os.PathLike | None = None) -> Path | None:
+    try:
+        base = Path(cwd or os.getcwd()).resolve()
+    except OSError:
+        return None
+    for root in (base, *base.parents):
+        candidate = root / "src" / "browser_harness"
+        if candidate.is_dir():
+            try:
+                return candidate.resolve()
+            except OSError:
+                return candidate
+    return None
+
+
+def _doctor_source_mismatch() -> dict | None:
+    package_source = _package_source_path()
+    cwd_source = _cwd_browser_harness_source_path()
+    if cwd_source and cwd_source != package_source:
+        return {
+            "package_source": str(package_source),
+            "cwd_source": str(cwd_source),
+        }
+    return None
+
+
 def ensure_daemon(wait=60.0, name=None, env=None, binding=None):
     """Idempotent. Self-heals stale daemon, cold Chrome, and missing Allow on chrome://inspect."""
     b_name, runtime_dir, tmp_dir = _binding_parts(binding)
@@ -894,6 +924,8 @@ def run_doctor():
     profile_use = shutil.which("profile-use") is not None
     api_key = bool(os.environ.get("BROWSER_USE_API_KEY"))
     latest = _latest_release_tag()
+    source_path = _package_source_path()
+    source_mismatch = _doctor_source_mismatch()
     # Only claim an update when we know the installed version — `cur or "(unknown)"`
     # for display would otherwise be parsed as (0,) and flag every latest as newer.
     newer = bool(cur and latest and _version_tuple(latest) > _version_tuple(cur))
@@ -908,10 +940,15 @@ def run_doctor():
     print(f"  platform          {platform.system()} {platform.release()}")
     print(f"  python            {sys.version.split()[0]}")
     print(f"  version           {cur_display} ({mode})")
+    print(f"  source path       {source_path}")
     if latest:
         print(f"  latest release    {latest}" + (" (update available)" if newer else ""))
     else:
         print("  latest release    (could not reach github)")
+    if source_mismatch:
+        print("[source-mismatch]")
+        print(f"Current directory contains: {source_mismatch['cwd_source']}")
+        print(f"Imported browser-harness from: {source_mismatch['package_source']}")
     if platform.system() == "Linux":
         bname, bpath = _doctor_probe_chrome_binary_for_snap()
         if bname and bpath and _is_snap_browser(bpath):

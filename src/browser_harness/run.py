@@ -1,4 +1,4 @@
-import ast, os, sys, urllib.request
+import ast, json, os, sys, urllib.request
 
 # Windows default stdout encoding is cp1252, which can't encode the 🐴 marker
 # helpers prepend to tab titles (or anything else outside Latin-1). Force UTF-8
@@ -49,6 +49,9 @@ Commands:
   browser-harness --doctor         diagnose install, daemon, and browser state
   browser-harness doctor           same as --doctor
   browser-harness doctor --fix-snap   print how to fix Snap Chromium blocking CDP (Linux)
+  browser-harness profiles         list local Chrome/Chromium profiles without starting the daemon
+  browser-harness use-profile <id> select a local profile without starting the daemon
+  browser-harness open-profile [id] open/focus a local profile without starting the daemon
   browser-harness auth login          sign in to Browser Use Cloud for cloud browsers
   browser-harness auth login --device-code   sign in from SSH/headless environments
   browser-harness auth status         show Browser Use Cloud auth state
@@ -167,6 +170,10 @@ def _explicit_cdp_configured():
     return bool(os.environ.get("BU_CDP_URL") or os.environ.get("BU_CDP_WS"))
 
 
+def _print_json(value):
+    print(json.dumps(value, indent=2, default=str))
+
+
 def main():
     args = sys.argv[1:]
     if args and args[0] in {"-h", "--help"}:
@@ -185,6 +192,26 @@ def main():
             print("usage: browser-harness doctor [--fix-snap]", file=sys.stderr)
             sys.exit(2)
         sys.exit(run_doctor())
+    if args and args[0] == "profiles":
+        rest = args[1:]
+        verbose = rest == ["--verbose"]
+        if rest and not verbose:
+            print("usage: browser-harness profiles [--verbose]", file=sys.stderr)
+            sys.exit(2)
+        _print_json(browser_profiles(verbose=verbose))
+        return
+    if args and args[0] == "use-profile":
+        if len(args) != 2:
+            print("usage: browser-harness use-profile <profile-id>", file=sys.stderr)
+            sys.exit(2)
+        _print_json(browser_use_profile(args[1]))
+        return
+    if args and args[0] == "open-profile":
+        if len(args) > 2:
+            print("usage: browser-harness open-profile [profile-id]", file=sys.stderr)
+            sys.exit(2)
+        _print_json(open_local_profile(args[1] if len(args) == 2 else None, marker=False))
+        return
     if args and args[0] == "auth":
         sys.exit(auth.run_auth_cli(args[1:]))
     if args and args[0] == "--update":
