@@ -165,6 +165,21 @@ def test_fill_input_no_clear_skips_ctrl_a():
     assert "Backspace" not in keys_seen
 
 
+def test_press_key_modified_character_does_not_emit_char_event():
+    key_events = []
+
+    def fake_cdp(method, **kwargs):
+        if method == "Input.dispatchKeyEvent":
+            key_events.append(kwargs)
+        return {}
+
+    with patch("browser_harness.helpers.cdp", side_effect=fake_cdp):
+        helpers.press_key("a", modifiers=4)
+
+    assert [e["type"] for e in key_events] == ["keyDown", "keyUp"]
+    assert not any(e.get("type") == "char" for e in key_events)
+
+
 # --- wait_for_element ---
 
 def test_wait_for_element_returns_true_when_found_immediately():

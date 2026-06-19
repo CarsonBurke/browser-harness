@@ -449,17 +449,22 @@ def _post_json(url: str, payload: dict) -> dict:
         desc = data.get("error_description") or data.get("reason") or data.get("message")
         detail = f": {desc}" if desc else ""
         raise AuthError(f"{err}{detail}") from e
+    except urllib.error.URLError as e:
+        raise AuthError(f"network error: {e.reason}") from e
 
 
 def _read_manual_api_key(input_stream=None) -> str:
     stream = input_stream or sys.stdin
     if hasattr(stream, "isatty") and stream.isatty():
-        key = getpass.getpass("Browser Use API key: ")
+        try:
+            key = getpass.getpass("Browser Use API key: ")
+        except EOFError as e:
+            raise AuthError("no API key provided") from e
     else:
         key = stream.read()
     key = (key or "").strip()
     if not key:
-        raise AuthError("no API key provided on stdin")
+        raise AuthError("no API key provided")
     if len(key) < 20:
         raise AuthError("API key looks too short")
     return key

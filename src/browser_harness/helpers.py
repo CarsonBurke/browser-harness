@@ -230,7 +230,8 @@ def press_key(key, modifiers=0):
     so listeners checking e.keyCode / e.key all fire."""
     vk, code, text = _KEYS.get(key, (ord(key[0]) if len(key) == 1 else 0, key, key if len(key) == 1 else ""))
     base = {"key": key, "code": code, "modifiers": modifiers, "windowsVirtualKeyCode": vk, "nativeVirtualKeyCode": vk}
-    printable_char = len(key) == 1 and bool(text)
+    shortcut_modifiers = modifiers & (1 | 2 | 4)  # Alt/Ctrl/Meta turn single keys into shortcuts.
+    printable_char = len(key) == 1 and bool(text) and not shortcut_modifiers
     cdp("Input.dispatchKeyEvent", type="keyDown", **base, **({} if printable_char or not text else {"text": text}))
     if printable_char:
         cdp("Input.dispatchKeyEvent", type="char", text=text, **{k: v for k, v in base.items() if k != "text"})

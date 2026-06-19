@@ -1,8 +1,11 @@
 import json
 import stat
 import threading
+import urllib.error
 import urllib.request
 from io import StringIO
+
+import pytest
 
 from browser_harness import auth
 
@@ -77,6 +80,30 @@ def test_api_key_stdin_login_rejects_missing_or_short_key(monkeypatch, tmp_path)
             raise AssertionError("expected AuthError")
 
     assert not (tmp_path / "auth.json").exists()
+
+
+def test_manual_api_key_tty_eof_becomes_auth_error(monkeypatch):
+    class TtyInput:
+        def isatty(self):
+            return True
+
+    def fake_getpass(_prompt):
+        raise EOFError
+
+    monkeypatch.setattr(auth.getpass, "getpass", fake_getpass)
+
+    with pytest.raises(auth.AuthError, match="no API key provided"):
+        auth._read_manual_api_key(TtyInput())
+
+
+def test_post_json_network_error_becomes_auth_error(monkeypatch):
+    def fake_urlopen(_req, timeout):
+        raise urllib.error.URLError("offline")
+
+    monkeypatch.setattr(auth.urllib.request, "urlopen", fake_urlopen)
+
+    with pytest.raises(auth.AuthError, match="network error: offline"):
+        auth._post_json("https://api.example.test/auth", {"x": 1})
 
 
 def test_browser_login_callback_exchanges_and_stores_key(monkeypatch, tmp_path):
