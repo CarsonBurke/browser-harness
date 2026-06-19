@@ -33,9 +33,9 @@ def test_status_and_logout_for_stored_key(monkeypatch, tmp_path):
     removed = auth.clear_auth()
 
     assert status["status"] == "authenticated"
-    assert status["source"] == "oauth"
-    assert status["api_key_id"] == "key-123"
+    assert status["source"] == "stored"
     assert "api_key" not in status
+    assert "api_key_id" not in status
     assert mode == 0o600
     assert removed is True
     assert auth.auth_status()["status"] == "missing"
@@ -66,6 +66,18 @@ def test_api_key_stdin_login_stores_manual_key_without_printing(monkeypatch, tmp
     assert manual_key not in out
     assert "stored" in out.lower()
     assert json.loads((tmp_path / "auth.json").read_text())["browser_use"]["source"] == "manual"
+
+
+def test_api_key_stdin_json_login_outputs_no_secret(monkeypatch, tmp_path, capsys):
+    monkeypatch.delenv("BROWSER_USE_API_KEY", raising=False)
+    monkeypatch.setenv("BH_AUTH_PATH", str(tmp_path / "auth.json"))
+    manual_key = "manual-key-1234567890abcdef"
+
+    auth.api_key_stdin_login(json_output=True, input_stream=StringIO(manual_key + "\n"))
+    out = capsys.readouterr().out
+
+    assert manual_key not in out
+    assert json.loads(out) == {"status": "stored", "path": str(tmp_path / "auth.json")}
 
 
 def test_api_key_stdin_login_rejects_missing_or_short_key(monkeypatch, tmp_path):

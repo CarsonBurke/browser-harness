@@ -193,15 +193,7 @@ def auth_status() -> dict:
     stored = stored_auth_record()
     if not stored or not stored.get("api_key"):
         return {"status": "missing", "source": None, "path": str(auth_path())}
-    return {
-        "status": "authenticated",
-        "source": stored.get("source") or "stored",
-        "path": str(auth_path()),
-        "api_key_id": stored.get("api_key_id"),
-        "project_id": stored.get("project_id"),
-        "expires_at": stored.get("expires_at"),
-        "scopes": stored.get("scopes") or [],
-    }
+    return {"status": "authenticated", "source": "stored", "path": str(auth_path())}
 
 
 def pkce_pair() -> tuple[str, str]:
@@ -294,7 +286,7 @@ def browser_login(*, open_url=True, json_output=False, timeout=AUTH_TIMEOUT_SECO
             print("Waiting for login to complete after you open the URL...", flush=True)
     record = complete_browser_auth(start, timeout=timeout)
     if json_output:
-        print(json.dumps(_stored_output(record)), flush=True)
+        print(json.dumps(_stored_success_output()), flush=True)
     else:
         print("Browser Use Cloud auth stored.")
     return record
@@ -372,7 +364,7 @@ def device_login(*, open_url=True, json_output=False) -> AuthRecord:
         print("Waiting for login to complete...", flush=True)
     record = complete_device_auth(start)
     if json_output:
-        print(json.dumps(_stored_output(record)), flush=True)
+        print(json.dumps(_stored_success_output()), flush=True)
     else:
         print("Browser Use Cloud auth stored.")
     return record
@@ -383,7 +375,7 @@ def api_key_stdin_login(*, json_output=False, input_stream=None) -> AuthRecord:
     record = AuthRecord(api_key=key, source="manual")
     save_auth_record(record)
     if json_output:
-        print(json.dumps(_stored_output(record)), flush=True)
+        print(json.dumps(_stored_success_output()), flush=True)
     else:
         print("Browser Use Cloud API key stored.")
     return record
@@ -509,15 +501,8 @@ def _auth_error_code(message: str) -> str:
     return message.split(":", 1)[0]
 
 
-def _stored_output(record: AuthRecord) -> dict:
-    return {
-        "status": "stored",
-        "api_key_id": record.api_key_id,
-        "project_id": record.project_id,
-        "expires_at": record.expires_at,
-        "scopes": record.scopes,
-        "path": str(auth_path()),
-    }
+def _stored_success_output() -> dict:
+    return {"status": "stored", "path": str(auth_path())}
 
 
 def run_auth_cli(argv: list[str]) -> int:
