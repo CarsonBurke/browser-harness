@@ -133,7 +133,7 @@ def auth_path() -> Path:
 def load_auth_file(path: Path | None = None) -> dict:
     path = path or auth_path()
     try:
-        return json.loads(path.read_text())
+        return json.loads(path.read_text(encoding="utf-8"))
     except FileNotFoundError:
         return {}
     except json.JSONDecodeError as e:
