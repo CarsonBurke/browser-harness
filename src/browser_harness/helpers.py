@@ -156,6 +156,9 @@ def _preprocess_markdown_content(content, max_newlines=3):
     for line in content.split("\n"):
         stripped = line.strip()
         if not stripped:
+            # keep one blank line so markdown paragraphs stay separated
+            if filtered_lines and filtered_lines[-1] != "":
+                filtered_lines.append("")
             continue
         if len(stripped) > 100 and stripped[0] in "{[":
             try:
@@ -201,13 +204,26 @@ def read_page(max_chars=4000):
 _INTERACTIVE_AX_ROLES = {
     "button", "link", "textbox", "searchbox", "checkbox", "radio", "combobox",
     "switch", "slider", "spinbutton", "menuitem", "menuitemcheckbox",
-    "menuitemradio", "tab", "option", "listbox", "textfield",
+    "menuitemradio", "tab", "option", "listbox", "textfield", "gridcell",
     "popupbutton", "togglebutton", "disclosuretriangle",
 }
 
+# AX containers that report focusable=true without being click targets
+_NON_TARGET_FOCUSABLE_ROLES = {"rootwebarea", "webarea", "iframe", "document"}
+
+
+def _ax_focusable(node):
+    for prop in node.get("properties") or []:
+        if prop.get("name") == "focusable":
+            return bool((prop.get("value") or {}).get("value"))
+    return False
+
 
 def list_interactive(limit=60, viewport_only=True):
-    """Visible interactive elements with viewport coordinates for click_at_xy."""
+    """Visible interactive elements with viewport coordinates for click_at_xy.
+
+    Roles/names come from the AX tree; custom widgets count when focusable.
+    With viewport_only=False, off-screen entries need scrolling before use."""
     ax_nodes = cdp("Accessibility.getFullAXTree").get("nodes", [])
     snap = cdp("DOMSnapshot.captureSnapshot", computedStyles=[])
     vp = json.loads(js("JSON.stringify({w:innerWidth,h:innerHeight,sx:scrollX,sy:scrollY})"))
@@ -228,7 +244,9 @@ def list_interactive(limit=60, viewport_only=True):
         if n.get("ignored"):
             continue
         role = ((n.get("role") or {}).get("value") or "").lower()
-        if role not in _INTERACTIVE_AX_ROLES:
+        if role not in _INTERACTIVE_AX_ROLES and not (
+            _ax_focusable(n) and role not in _NON_TARGET_FOCUSABLE_ROLES
+        ):
             continue
         b = rects.get(n.get("backendDOMNodeId"))
         if not b or b[2] < 4 or b[3] < 4:
@@ -241,6 +259,19 @@ def list_interactive(limit=60, viewport_only=True):
         out.append({"x": round(x), "y": round(y), "role": role, "name": name})
         if len(out) >= int(limit):
             break
+    # Focusable custom widgets often have no AX name; backfill from the DOM
+    # text under their coordinates in a single evaluate
+    unnamed = [e for e in out if not e["name"] and 0 <= e["x"] <= vp["w"] and 0 <= e["y"] <= vp["h"]]
+    if unnamed:
+        pts = json.dumps([[e["x"], e["y"]] for e in unnamed])
+        texts = js(
+            "(%s).map(([x,y]) => {const el = document.elementFromPoint(x,y);"
+            "return el ? (el.innerText || el.getAttribute('aria-label') || '').trim()"
+            ".replace(/\\s+/g, ' ').slice(0, 60) : '';})" % pts
+        )
+        if isinstance(texts, list):
+            for e, t in zip(unnamed, texts):
+                e["name"] = t or ""
     return out
 
 
