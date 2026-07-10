@@ -212,7 +212,7 @@ _INTERACTIVE_AX_ROLES = {
 
 def _snapshot_text(node_idx, children, node_name, node_value, strings):
     """Concatenated descendant text of a DOMSnapshot node (its label)."""
-    parts, stack, budget = [], [children.get(node_idx, [])[:]], 0
+    parts, budget = [], 0
     flat = children.get(node_idx, [])[:]
     while flat and budget < 400:
         i = flat.pop(0); budget += 1
