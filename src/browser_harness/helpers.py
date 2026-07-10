@@ -208,71 +208,100 @@ _INTERACTIVE_AX_ROLES = {
     "popupbutton", "togglebutton", "disclosuretriangle",
 }
 
-# AX containers that report focusable=true without being click targets
-_NON_TARGET_FOCUSABLE_ROLES = {"rootwebarea", "webarea", "iframe", "document"}
 
 
-def _ax_focusable(node):
-    for prop in node.get("properties") or []:
-        if prop.get("name") == "focusable":
-            return bool((prop.get("value") or {}).get("value"))
-    return False
+def _snapshot_text(node_idx, children, node_name, node_value, strings):
+    """Concatenated descendant text of a DOMSnapshot node (its label)."""
+    parts, stack, budget = [], [children.get(node_idx, [])[:]], 0
+    flat = children.get(node_idx, [])[:]
+    while flat and budget < 400:
+        i = flat.pop(0); budget += 1
+        if strings[node_name[i]] == "#text":
+            v = node_value[i]
+            if v >= 0:
+                parts.append(strings[v])
+        flat.extend(children.get(i, []))
+    return " ".join(" ".join(parts).split())[:60]
 
 
 def list_interactive(limit=60, viewport_only=True):
     """Visible interactive elements with viewport coordinates for click_at_xy.
 
-    Roles/names come from the AX tree; custom widgets count when focusable.
+    Elements with an interactive AX role come first; roleless custom widgets are added
+    only when the snapshot marks them clickable (a real click listener).
     With viewport_only=False, off-screen entries need scrolling before use."""
     ax_nodes = cdp("Accessibility.getFullAXTree").get("nodes", [])
     snap = cdp("DOMSnapshot.captureSnapshot", computedStyles=[])
-    vp = json.loads(js("JSON.stringify({w:innerWidth,h:innerHeight,sx:scrollX,sy:scrollY})"))
+    vp = cdp("Page.getLayoutMetrics").get("cssLayoutViewport", {})
+    vw, vh = vp.get("clientWidth", 0), vp.get("clientHeight", 0)
 
-    # backendNodeId -> absolute layout bounds, main document only (sub-document
-    # bounds are in the iframe's own coordinate space and would need offsetting)
-    rects = {}
     docs = snap.get("documents") or []
-    if docs:
-        doc = docs[0]
-        backend_ids = doc["nodes"]["backendNodeId"]
-        layout = doc["layout"]
-        for i, node_index in enumerate(layout["nodeIndex"]):
-            rects[backend_ids[node_index]] = layout["bounds"][i]
+    if not docs:
+        return []
+    doc = docs[0]
+    strings = snap["strings"]
+    nodes = doc["nodes"]
+    node_name, node_value, parent = nodes["nodeName"], nodes["nodeValue"], nodes["parentIndex"]
+    # main document only — sub-document bounds are in the iframe's own space
+    sx, sy = doc.get("scrollOffsetX", 0), doc.get("scrollOffsetY", 0)
 
-    out = []
+    # backendNodeId -> layout bounds, and node index -> backendNodeId
+    idx_bounds = {}
+    layout = doc["layout"]
+    for i, node_index in enumerate(layout["nodeIndex"]):
+        idx_bounds[node_index] = layout["bounds"][i]
+    backend_ids = nodes["backendNodeId"]
+    id_to_idx = {bid: i for i, bid in enumerate(backend_ids)}
+    clickable = set((nodes.get("isClickable") or {}).get("index") or [])
+    children = {}
+    for i, par in enumerate(parent):
+        if par >= 0:
+            children.setdefault(par, []).append(i)
+
+    def emit(node_idx, role, name):
+        b = idx_bounds.get(node_idx)
+        if not b or b[2] < 4 or b[3] < 4:
+            return None
+        x = b[0] - sx + b[2] / 2
+        y = b[1] - sy + min(b[3] / 2, 40)
+        if viewport_only and not (0 <= x <= vw and 0 <= y <= vh):
+            return None
+        if not name:
+            name = _snapshot_text(node_idx, children, node_name, node_value, strings)
+        return {"x": round(x), "y": round(y), "role": role, "name": name}
+
+    primary, seen = [], set()
     for n in ax_nodes:
         if n.get("ignored"):
             continue
         role = ((n.get("role") or {}).get("value") or "").lower()
-        if role not in _INTERACTIVE_AX_ROLES and not (
-            _ax_focusable(n) and role not in _NON_TARGET_FOCUSABLE_ROLES
-        ):
+        if role not in _INTERACTIVE_AX_ROLES:
             continue
-        b = rects.get(n.get("backendDOMNodeId"))
-        if not b or b[2] < 4 or b[3] < 4:
+        ni = id_to_idx.get(n.get("backendDOMNodeId"))
+        if ni is None:
             continue
-        x = b[0] - vp["sx"] + b[2] / 2
-        y = b[1] - vp["sy"] + min(b[3] / 2, 40)
-        if viewport_only and not (0 <= x <= vp["w"] and 0 <= y <= vp["h"]):
+        entry = emit(ni, role, ((n.get("name") or {}).get("value") or "").strip()[:60])
+        if entry:
+            seen.add(ni)
+            primary.append(entry)
+            if len(primary) >= int(limit):
+                return primary
+
+    # roleless custom widgets Chrome flagged clickable (onclick / click listener);
+    # scroll and focus-management wrappers are not flagged, so they never leak
+    fallback = []
+    for ni in clickable:
+        if ni in seen:
             continue
-        name = ((n.get("name") or {}).get("value") or "").strip()[:60]
-        out.append({"x": round(x), "y": round(y), "role": role, "name": name})
-        if len(out) >= int(limit):
-            break
-    # Focusable custom widgets often have no AX name; backfill from the DOM
-    # text under their coordinates in a single evaluate
-    unnamed = [e for e in out if not e["name"] and 0 <= e["x"] <= vp["w"] and 0 <= e["y"] <= vp["h"]]
-    if unnamed:
-        pts = json.dumps([[e["x"], e["y"]] for e in unnamed])
-        texts = js(
-            "(%s).map(([x,y]) => {const el = document.elementFromPoint(x,y);"
-            "return el ? (el.innerText || el.getAttribute('aria-label') || '').trim()"
-            ".replace(/\\s+/g, ' ').slice(0, 60) : '';})" % pts
-        )
-        if isinstance(texts, list):
-            for e, t in zip(unnamed, texts):
-                e["name"] = t or ""
-    return out
+        b = idx_bounds.get(ni)
+        # a delegated listener on a big container isn't a click target
+        if b and b[2] * b[3] > 0.4 * vw * vh:
+            continue
+        entry = emit(ni, "clickable", "")
+        if entry:
+            fallback.append(entry)
+
+    return (primary + fallback)[: int(limit)]
 
 
 # --- input ---
