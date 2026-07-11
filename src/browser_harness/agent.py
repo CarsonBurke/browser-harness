@@ -209,8 +209,11 @@ def run_task(args: argparse.Namespace) -> int:
         command.append("--dangerously-bypass-approvals-and-sandbox")
     command.append("-")  # read the prompt from stdin
 
+    # Keep stderr clean: the fork's `exec --json` puts the whole transcript on
+    # stdout and nothing on stderr, so downstream extractors that prefer stderr
+    # (e.g. the agent benchmark) fall through to the rich stdout stream. Emitting
+    # a run-root banner here would shadow that transcript.
     completed = subprocess.run(command, input=task, text=True, cwd=run_root, env=env)
-    print(f"\n[browser-harness] run root: {run_root}", file=sys.stderr)
     return completed.returncode
 
 
