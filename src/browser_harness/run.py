@@ -138,7 +138,7 @@ def _telemetry_command(args):
         return "reload"
     if first == "--debug-clicks":
         return "debug-clicks"
-    if first in {"auth", "skill", "telemetry"}:
+    if first in {"auth", "skill", "telemetry", "agent", "tui"}:
         return first
     return "usage"
 
