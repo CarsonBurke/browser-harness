@@ -89,8 +89,11 @@ def prepare_workspace(run_root: Path) -> Path:
 
     wrapper = run_root / "bin" / "browser-harness"
     src_dir = root / "src"
+    # browser-env is written by the TUI's /browser picker; sourcing it here lets
+    # a backend switch apply to the agent's next browser call without a restart.
     wrapper.write_text(
         "#!/bin/sh\n"
+        f"[ -f {run_root!s}/browser-env ] && . {run_root!s}/browser-env\n"
         f"PYTHONPATH={src_dir!s}${{PYTHONPATH:+:$PYTHONPATH}} "
         f"exec {sys.executable!s} -m browser_harness.run \"$@\"\n"
     )
@@ -137,17 +140,34 @@ def _load_codex_sdk(paths: CodexPaths):
     return ApprovalMode, Codex, CodexConfig, Sandbox
 
 
+def _browser_label() -> str:
+    if os.environ.get("BU_CDP_WS") or os.environ.get("BU_CDP_URL"):
+        return "Custom CDP"
+    if os.environ.get("BROWSER_USE_API_KEY") and os.environ.get("BU_AUTOSPAWN"):
+        return "Browser Use Cloud"
+    return "Local Chrome"
+
+
+def workspace_env(run_root: Path, paths: CodexPaths) -> dict:
+    env = os.environ.copy()
+    env["PATH"] = str(run_root / "bin") + os.pathsep + env.get("PATH", "")
+    env["BROWSER_HARNESS_AGENT_ROOT"] = str(run_root)
+    # The TUI's /secrets flows shell out to this exact CLI, and its composer
+    # shows the backend name from BH_BROWSER_LABEL.
+    env["BROWSER_HARNESS_CLI"] = str(run_root / "bin" / "browser-harness")
+    env.setdefault("BH_BROWSER_LABEL", _browser_label())
+    if paths.sdk_src is not None:
+        env["PYTHONPATH"] = str(paths.sdk_src) + os.pathsep + env.get("PYTHONPATH", "")
+    return env
+
+
 def run_task(args: argparse.Namespace) -> int:
     paths = resolve_codex_paths(args)
     run_root = prepare_workspace(Path(args.run_root).expanduser() if args.run_root else default_run_root())
     ApprovalMode, Codex, CodexConfig, Sandbox = _load_codex_sdk(paths)
     task = resolved_task(args)
 
-    env = os.environ.copy()
-    env["PATH"] = str(run_root / "bin") + os.pathsep + env.get("PATH", "")
-    env["BROWSER_HARNESS_AGENT_ROOT"] = str(run_root)
-    if paths.sdk_src is not None:
-        env["PYTHONPATH"] = str(paths.sdk_src) + os.pathsep + env.get("PYTHONPATH", "")
+    env = workspace_env(run_root, paths)
 
     approval_mode = ApprovalMode.auto_review if args.approval_mode == "auto-review" else ApprovalMode.deny_all
     sandbox = Sandbox.full_access if args.full_access else Sandbox.workspace_write
@@ -182,11 +202,7 @@ def launch_tui(args: argparse.Namespace) -> int:
     paths = resolve_codex_paths(args)
     run_root = prepare_workspace(Path(args.run_root).expanduser() if args.run_root else default_run_root())
 
-    env = os.environ.copy()
-    env["PATH"] = str(run_root / "bin") + os.pathsep + env.get("PATH", "")
-    env["BROWSER_HARNESS_AGENT_ROOT"] = str(run_root)
-    if paths.sdk_src is not None:
-        env["PYTHONPATH"] = str(paths.sdk_src) + os.pathsep + env.get("PYTHONPATH", "")
+    env = workspace_env(run_root, paths)
 
     approval = "on-request" if args.approval_mode == "auto-review" else "never"
     sandbox = "danger-full-access" if args.full_access else "workspace-write"
