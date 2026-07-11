@@ -118,8 +118,10 @@ Put durable task deliverables in:
     {run_root / "agent_outputs"}
 
 Do not assume a task succeeded from a command exit alone; inspect browser state or
-saved artifacts. If a site requires login or human credentials, stop and explain
-what is needed.
+saved artifacts. Stored credentials and 2FA codes are available inside PY scripts
+via available_secrets(), secret(name), and totp(name) — use them when one matches
+the page's domain, and never print the values. If a site requires credentials that
+are not stored, stop and explain what is needed.
 
 Browser-harness reference instructions:
 

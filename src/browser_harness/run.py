@@ -27,7 +27,7 @@ from .admin import (
     stop_remote_daemon,
     sync_local_profile,
 )
-from . import auth, telemetry
+from . import auth, secrets, telemetry
 from . import _ipc as ipc
 from . import agent as codex_agent
 from .helpers import *
@@ -54,6 +54,9 @@ Commands:
   browser-harness auth status         show Browser Use Cloud auth state
   browser-harness auth logout         remove stored Browser Use Cloud auth
   browser-harness skill               print the browser-harness skill text
+  browser-harness secrets set --domain D --name N [--totp] [--stdin]   store a credential (value via hidden prompt or stdin)
+  browser-harness secrets list        list stored credential names/kinds (never values)
+  browser-harness secrets remove --domain D --name N   delete a stored credential
   browser-harness telemetry status    show anonymous telemetry opt-out state
   browser-harness --update [-y]    pull the latest version (agents: pass -y)
   browser-harness --reload         stop the daemon so next call picks up code changes
@@ -138,7 +141,7 @@ def _telemetry_command(args):
         return "reload"
     if first == "--debug-clicks":
         return "debug-clicks"
-    if first in {"auth", "skill", "telemetry", "agent", "tui"}:
+    if first in {"auth", "skill", "telemetry", "agent", "tui", "secrets"}:
         return first
     return "usage"
 
@@ -327,6 +330,8 @@ def _run(args):
         sys.exit(run_doctor())
     if args and args[0] == "auth":
         sys.exit(auth.run_auth_cli(args[1:]))
+    if args and args[0] == "secrets":
+        sys.exit(secrets.run_secrets_cli(args[1:]))
     if args and args[0] == "skill":
         if len(args) != 1:
             print("usage: browser-harness skill", file=sys.stderr)
