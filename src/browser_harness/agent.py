@@ -91,9 +91,16 @@ def prepare_workspace(run_root: Path) -> Path:
     src_dir = root / "src"
     # browser-env is written by the TUI's /browser picker; sourcing it here lets
     # a backend switch apply to the agent's next browser call without a restart.
+    # Benchmark runs (BENCH_TASK_DIR) provide their own instrumented wrapper —
+    # delegate to it so recording/cloud isolation apply no matter which wrapper
+    # the model invokes.
     wrapper.write_text(
         "#!/bin/sh\n"
         f"[ -f {run_root!s}/browser-env ] && . {run_root!s}/browser-env\n"
+        'if [ -n "$BENCH_TASK_DIR" ] && [ -x "$BENCH_TASK_DIR/bin/browser-harness" ] '
+        f'&& [ "$BENCH_TASK_DIR/bin/browser-harness" != {str(wrapper)!r} ]; then\n'
+        '  exec "$BENCH_TASK_DIR/bin/browser-harness" "$@"\n'
+        "fi\n"
         f"PYTHONPATH={src_dir!s}${{PYTHONPATH:+:$PYTHONPATH}} "
         f"exec {sys.executable!s} -m browser_harness.run \"$@\"\n"
     )
