@@ -50,7 +50,7 @@ def test_target_triple_maps_platforms(monkeypatch):
     assert agent._target_triple() == "x86_64-apple-darwin"
     monkeypatch.setattr(agent.platform, "system", lambda: "Linux")
     monkeypatch.setattr(agent.platform, "machine", lambda: "x86_64")
-    assert agent._target_triple() == "x86_64-unknown-linux-musl"
+    assert agent._target_triple() == "x86_64-unknown-linux-gnu"
 
 
 def test_build_instructions_points_to_agent_outputs(tmp_path):

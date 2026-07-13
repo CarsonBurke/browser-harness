@@ -50,7 +50,7 @@ def _target_triple() -> str:
     if system == "Darwin":
         return "aarch64-apple-darwin" if arm else "x86_64-apple-darwin"
     if system == "Linux":
-        return "aarch64-unknown-linux-musl" if arm else "x86_64-unknown-linux-musl"
+        return "aarch64-unknown-linux-gnu" if arm else "x86_64-unknown-linux-gnu"
     raise RuntimeError(
         f"No prebuilt Browser Harness agent for {system}/{machine}. "
         f"Build from source: cd {CODEX_SUBMODULE_DIR}/codex-rs && cargo build --release -p codex-cli."
