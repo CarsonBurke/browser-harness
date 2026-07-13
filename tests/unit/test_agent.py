@@ -27,13 +27,11 @@ def test_resolve_codex_paths_prefers_explicit_binary(tmp_path):
     assert paths.bin == codex_bin
 
 
-def test_resolve_codex_paths_errors_when_no_binary(monkeypatch):
+def test_resolve_codex_paths_errors_when_submodule_missing(tmp_path):
     args = agent.build_parser().parse_args(["task"])
-    monkeypatch.delenv("BROWSER_HARNESS_CODEX_BIN", raising=False)
-    monkeypatch.delenv("BH_CODEX_BIN", raising=False)
 
     with patch("browser_harness.agent.default_codex_repo", return_value=None), \
-         pytest.raises(FileNotFoundError):
+         pytest.raises(FileNotFoundError, match="submodule"):
         agent.resolve_codex_paths(args)
 
 

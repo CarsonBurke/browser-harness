@@ -38,28 +38,36 @@ Click Allow when the per-attach popup appears (Chrome 144+):
 
 See [agent-workspace/domain-skills/](agent-workspace/domain-skills/) for example tasks.
 
-## Built-in Codex agent
+## Built-in agent (Browser Harness TUI)
 
-This worktree also exposes a self-contained Codex-backed runner:
+Browser Harness ships its own agent: a fork of OpenAI Codex, embedded as the
+[`codex-agent`](codex-agent) git submodule
+([browser-use/browser-harness-tui](https://github.com/browser-use/browser-harness-tui)),
+with a Terminal-style TUI and native browser-harness tool integration.
 
-```bash
-browser-harness agent "open example.com and tell me the page title" \
-  --codex-repo ../Codex-browser-harness-embed
-```
-
-For an interactive standalone UI, launch the forked Codex TUI in a prepared
-browser-harness workspace:
+Fetch and build it once:
 
 ```bash
-browser-harness tui "open example.com and tell me the page title" \
-  --codex-repo ../Codex-browser-harness-embed
+git submodule update --init
+cd codex-agent/codex-rs && cargo build --release -p codex-cli && cd ../..
 ```
 
-It launches the forked Codex app-server from that repo, creates an isolated
-browser-harness run workspace, injects the browser-harness instructions, and
-makes `./bin/browser-harness` available to the agent inside that workspace. It
-does not silently fall back to a system `codex` binary; build the fork first with
-`cd ../Codex-browser-harness-embed/codex-rs && cargo build -p codex-cli`.
+Dispatch a task headlessly:
+
+```bash
+browser-harness agent "open example.com and tell me the page title"
+```
+
+Or open the interactive TUI:
+
+```bash
+browser-harness tui
+```
+
+Both resolve the agent from the `codex-agent` submodule — no environment
+variables, no sibling-directory guessing. They create an isolated
+browser-harness run workspace, present the browser-harness skill, and make
+`./bin/browser-harness` available to the agent inside that workspace.
 
 ## Free Browser Use Cloud browsers
 

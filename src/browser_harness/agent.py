@@ -24,37 +24,45 @@ def package_root() -> Path:
     return Path(__file__).resolve().parents[2]
 
 
+# The forked Codex agent lives as a git submodule at <repo>/codex-agent
+# (github.com/browser-use/browser-harness-tui). This is the one canonical
+# location — no environment variables, no sibling-directory guessing.
+CODEX_SUBMODULE_DIR = "codex-agent"
+
+
 def default_codex_repo() -> Path | None:
-    env = os.environ.get("BROWSER_HARNESS_CODEX_REPO") or os.environ.get("BH_CODEX_REPO")
-    if env:
-        return Path(env).expanduser()
-    for name in ("Codex-browser-harness-embed", "Codex"):
-        candidate = package_root().parent / name
-        if candidate.exists():
-            return candidate
-    return None
+    candidate = package_root() / CODEX_SUBMODULE_DIR
+    return candidate if candidate.exists() else None
 
 
 def resolve_codex_paths(args: argparse.Namespace) -> CodexPaths:
+    # The `--codex-*` flags are explicit developer overrides (used by the
+    # benchmark harness); the default is always the bundled submodule.
     repo = Path(args.codex_repo).expanduser() if args.codex_repo else default_codex_repo()
-    sdk_env = args.codex_sdk or os.environ.get("BROWSER_HARNESS_CODEX_SDK") or os.environ.get("BH_CODEX_SDK")
-    sdk_src = Path(sdk_env).expanduser() if sdk_env else None
+
+    if args.codex_bin:
+        codex_bin = Path(args.codex_bin).expanduser()
+    elif repo is not None:
+        # Prefer a release build, fall back to debug.
+        release = repo / "codex-rs" / "target" / "release" / "codex"
+        debug = repo / "codex-rs" / "target" / "debug" / "codex"
+        codex_bin = release if release.exists() else debug
+        if not codex_bin.exists():
+            raise FileNotFoundError(
+                f"Codex agent binary not built. Run "
+                f"`cd {repo / 'codex-rs'} && cargo build --release -p codex-cli`."
+            )
+    else:
+        raise FileNotFoundError(
+            f"Codex agent submodule not found at {package_root() / CODEX_SUBMODULE_DIR}. "
+            "Run `git submodule update --init` in the browser-harness checkout."
+        )
+
+    sdk_src = Path(args.codex_sdk).expanduser() if args.codex_sdk else None
     if sdk_src is None and repo is not None:
         candidate = repo / "sdk" / "python" / "src"
         if candidate.exists():
             sdk_src = candidate
-
-    bin_env = args.codex_bin or os.environ.get("BROWSER_HARNESS_CODEX_BIN") or os.environ.get("BH_CODEX_BIN")
-    if bin_env:
-        codex_bin = Path(bin_env).expanduser()
-    elif repo is not None and (repo / "codex-rs" / "target" / "debug" / "codex").exists():
-        codex_bin = repo / "codex-rs" / "target" / "debug" / "codex"
-    else:
-        raise FileNotFoundError(
-            "No integrated Codex fork binary found. Build the fork with "
-            "`cd ../Codex-browser-harness-embed/codex-rs && cargo build -p codex-cli`, "
-            "or pass --codex-bin /path/to/forked/codex."
-        )
 
     if not codex_bin.exists():
         raise FileNotFoundError(f"Codex binary not found: {codex_bin}")
