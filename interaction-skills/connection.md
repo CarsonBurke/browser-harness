@@ -4,7 +4,7 @@
 
 When Chrome opens fresh, the only CDP `type: "page"` targets are `chrome://inspect` and `chrome://omnibox-popup.top-chrome/` (a 1px invisible viewport). If the daemon attaches to the omnibox popup, all subsequent work — including `new_tab()` and `goto_url()` — happens on tabs that exist in CDP but may not be visible in the Chrome UI.
 
-The daemon's `attach_first_page()` handles this by creating an `about:blank` tab when no real pages exist. If you still end up on an invisible tab, use `switch_tab()` which calls `Target.activateTarget` to bring the tab to front.
+The daemon stays unattached when no real page exists; it does not manufacture a bootstrap window. Start work with `new_window()`, or attach to a deliberately selected existing target when the task requires its state.
 
 ## Startup sequence
 
@@ -12,7 +12,7 @@ The daemon's `attach_first_page()` handles this by creating an `about:blank` tab
 2. If stale sockets exist but daemon is dead, clean them up
 3. List open tabs with `list_tabs()` to see what's available
 4. `ensure_real_tab()` attaches to a real page
-5. `switch_tab(target_id)` both attaches AND activates (brings to front)
+5. `attach_tab(target_id)` (or compatibility alias `switch_tab`) attaches without focusing or raising the browser
 
 ```python
 if not daemon_alive():
@@ -29,20 +29,11 @@ for t in tabs:
 tab = ensure_real_tab()
 ```
 
-## Bringing Chrome to front
-
-If Chrome is behind other windows or on another desktop:
-
-```python
-import subprocess
-subprocess.run(["osascript", "-e", 'tell application "Google Chrome" to activate'])
-```
-
 ## Navigating
 
-Prefer navigating an existing tab over `new_tab()`. Tabs created via CDP's `Target.createTarget` are visible but may open behind the active tab.
+Use `new_window()` for isolated work, then navigate that target with `goto_url()`. Chrome may put `new_tab()` into an existing user window, so create another background window when a separate page must stay open.
 
 ```python
-tab = ensure_real_tab()
-goto_url("https://example.com")
+target = new_window("https://example.com")
+print(current_tab())
 ```

@@ -1,6 +1,6 @@
 ---
 name: browser-harness
-description: "Always use browser-harness for any web interaction: automation, scraping, testing, or site/app work."
+description: Automate, test, scrape, or interact with web pages in a dedicated background browser window.
 ---
 
 # browser-harness
@@ -15,13 +15,15 @@ Domain skills are off by default. Set `BH_DOMAIN_SKILLS=1` to enable them; see t
 
 ```bash
 browser-harness <<'PY'
+new_window("https://example.com")
 print(page_info())
 PY
 ```
 
 - Invoke as `browser-harness`. Use heredocs for multi-line commands.
 - Helpers are pre-imported. `run.py` calls `ensure_daemon()` before `exec`.
-- First navigation is `new_tab(url)`, not `goto_url(url)`.
+- Start isolated work with `new_window(url)`, then use `goto_url(url)` in that target.
+- Never focus, raise, or activate a browser window. If the user wants to view one, let them select it themselves.
 - The normal local flow attaches to the running Chrome/Chromium CDP endpoint. No browser ids or local profile selection.
 
 ## Local Chrome
@@ -32,7 +34,7 @@ If the daemon cannot connect, run diagnostics:
 browser-harness --doctor
 ```
 
-If Chrome remote debugging is not enabled, the harness opens:
+If Chrome remote debugging is not enabled, ask the user to open:
 
 ```text
 chrome://inspect/#remote-debugging
@@ -71,7 +73,7 @@ start_remote_daemon("r7k2")
 PY
 
 BU_NAME=r7k2 browser-harness <<'PY'
-new_tab("https://example.com")
+new_window("https://example.com")
 print(page_info())
 PY
 ```
@@ -88,7 +90,7 @@ Cloud profile cookie sync reference: https://github.com/browser-use/browser-harn
 - Clicking: AX node -> box center -> `click_at_xy(x, y)` -> verify with a targeted `js(...)`/`page_info()` check.
 - Fall back to raw HTML via `js(...)` only when the AX tree lacks the element (canvas, exotic widgets); screenshot when layout or imagery matters.
 - After navigation, call `wait_for_load()`.
-- If the current tab is stale or internal, call `ensure_real_tab()`.
+- If the task target is stale or internal, attach to its stored target or create a new background window. Do not select an unrelated user tab.
 - Use `js(...)` for DOM inspection or extraction when coordinates are the wrong tool.
 - Login walls: stop and ask. Exception: use available SSO automatically when Chrome is already signed in; still stop for passwords, MFA, consent, or ambiguous account choice.
 - Raw CDP is available with `cdp("Domain.method", ...)`.
@@ -119,6 +121,7 @@ If you get stuck on a browser mechanic, check https://github.com/browser-use/bro
 
 - Coordinate clicks default. CDP mouse events pass through iframes/shadow/cross-origin at the compositor level.
 - Keep the connection model simple: use the default daemon, `BU_NAME`, `BU_CDP_URL`, `BU_CDP_WS`, or `start_remote_daemon(...)`.
+- Use `attach_tab(...)` to change targets without activation. Never call `Target.activateTarget` or platform focus APIs.
 - Core helpers stay short. Put task-specific helper additions in `$BH_AGENT_WORKSPACE/agent_helpers.py`.
 
 ## Gotchas
@@ -126,6 +129,8 @@ If you get stuck on a browser mechanic, check https://github.com/browser-use/bro
 - `chrome://inspect/#remote-debugging` must be enabled for local Chrome control.
 - Chrome may show an "Allow remote debugging?" popup; wait for the user to click Allow.
 - Omnibox popups are not real work tabs.
+- `new_tab()` may enter an existing user window; use `new_window()` for isolated agent work.
+- `new_window()` uses a temporary `[browser-harness]` title so platform rules can identify agent-created windows without affecting manually opened browser windows.
 - CDP target order is not Chrome's visible tab-strip order.
 - `BU_CDP_URL` is an HTTP DevTools endpoint; the daemon resolves it to WebSocket.
 - Ask before leaving cloud browsers running; stop them with `stop_remote_daemon(name)` or `PATCH /browsers/{id} {"action":"stop"}`.

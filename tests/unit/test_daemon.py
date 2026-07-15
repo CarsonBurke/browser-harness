@@ -21,6 +21,24 @@ def _fresh_daemon():
     return d
 
 
+def test_initial_attach_does_not_create_a_bootstrap_window():
+    class _NoPagesCDP(_FakeCDP):
+        async def send_raw(self, method, params=None, session_id=None):
+            self.calls.append((method, params, session_id))
+            if method == "Target.getTargets":
+                return {"targetInfos": []}
+            return {}
+
+    d = daemon.Daemon()
+    d.cdp = _NoPagesCDP()
+
+    asyncio.run(d.attach_first_page())
+
+    assert not any(method == "Target.createTarget" for method, _params, _session in d.cdp.calls)
+    assert d.session is None
+    assert d.target_id is None
+
+
 def test_set_session_enables_all_four_default_domains_on_new_session():
     """Regression: switch_tab() / new_tab() in helpers.py route through the
     `set_session` IPC, which previously only enabled Page on the new

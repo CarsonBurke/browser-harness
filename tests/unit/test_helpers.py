@@ -29,6 +29,66 @@ def test_max_dim_default_is_no_resize(fake_png):
     assert _run(fake_png, 4592, 2286) == (4592, 2286)
 
 
+# --- background tabs and windows ---
+
+def test_attach_tab_never_activates_or_focuses_target():
+    cdp_calls = []
+
+    def fake_cdp(method, **kwargs):
+        cdp_calls.append((method, kwargs))
+        if method == "Target.attachToTarget":
+            return {"sessionId": "session-1"}
+        return {}
+
+    with patch("browser_harness.helpers.cdp", side_effect=fake_cdp), \
+         patch("browser_harness.helpers._send", return_value={}) as send, \
+         patch("browser_harness.helpers._mark_tab"):
+        assert helpers.attach_tab("target-1") == "session-1"
+
+    assert not any(method == "Target.activateTarget" for method, _ in cdp_calls)
+    assert ("Target.attachToTarget", {"targetId": "target-1", "flatten": True}) in cdp_calls
+    send.assert_called_once_with({
+        "meta": "set_session",
+        "session_id": "session-1",
+        "target_id": "target-1",
+    })
+
+
+def test_switch_tab_is_non_activating_compatibility_alias():
+    with patch("browser_harness.helpers.attach_tab", return_value="session-1") as attach:
+        assert helpers.switch_tab("target-1") == "session-1"
+    attach.assert_called_once_with("target-1")
+
+
+@pytest.mark.parametrize(
+    ("helper", "expected_new_window"),
+    [(helpers.new_tab, False), (helpers.new_window, True)],
+)
+def test_new_pages_are_created_in_background(helper, expected_new_window):
+    cdp_calls = []
+
+    def fake_cdp(method, **kwargs):
+        cdp_calls.append((method, kwargs))
+        return {"targetId": "target-1"}
+
+    with patch("browser_harness.helpers.cdp", side_effect=fake_cdp), \
+         patch("browser_harness.helpers.attach_tab") as attach, \
+         patch("browser_harness.helpers.goto_url") as navigate:
+        assert helper() == "target-1"
+
+    create = next(kwargs for method, kwargs in cdp_calls if method == "Target.createTarget")
+    assert create["background"] is True
+    assert create["focus"] is False
+    assert create.get("newWindow", False) is expected_new_window
+    if expected_new_window:
+        assert create["url"] == helpers.BACKGROUND_WINDOW_URL
+        navigate.assert_called_once_with("about:blank")
+    else:
+        assert create["url"] == "about:blank"
+        navigate.assert_not_called()
+    attach.assert_called_once_with("target-1")
+
+
 def _seed_skill(tmp_path):
     site = tmp_path / "domain-skills" / "example"
     site.mkdir(parents=True)

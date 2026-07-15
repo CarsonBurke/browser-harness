@@ -84,3 +84,5 @@ browser-harness telemetry disable
 ```
 
 State lives under `${XDG_CONFIG_HOME:-~/.config}/browser-harness` by default: auth, telemetry id, agent workspace, runtime sockets, logs, screenshots, and temp files. Override with `BH_HOME` or `BROWSER_HARNESS_HOME`.
+
+If a visible connection test is needed, use `new_window()` so it opens in the background. Never activate or focus the browser automatically.

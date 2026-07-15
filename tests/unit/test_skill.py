@@ -31,5 +31,5 @@ def test_packaged_skill_frontmatter_is_valid_simple_yaml():
 
     assert metadata == {
         "name": "browser-harness",
-        "description": "Always use browser-harness for any web interaction: automation, scraping, testing, or site/app work.",
+        "description": "Automate, test, scrape, or interact with web pages in a dedicated background browser window.",
     }

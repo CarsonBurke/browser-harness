@@ -38,6 +38,7 @@ _load_env()
 NAME = os.environ.get("BU_NAME", "default")
 SOCK = ipc.sock_addr(NAME)
 INTERNAL = ("chrome://", "chrome-untrusted://", "devtools://", "chrome-extension://", "about:")
+BACKGROUND_WINDOW_URL = "data:text/html,<title>%5Bbrowser-harness%5D</title>"
 
 
 def _send(req):
@@ -291,38 +292,44 @@ def _mark_tab():
     try: cdp("Runtime.evaluate", expression="if(!document.title.startsWith('\U0001F434'))document.title='\U0001F434 '+document.title")
     except Exception: pass
 
-def switch_tab(target):
-    # Accept either a raw targetId string or the dict returned by current_tab() / list_tabs(),
-    # so `switch_tab(current_tab())` works without a manual ["targetId"] dance.
+def attach_tab(target):
+    """Attach the harness to a tab without focusing its browser window."""
+    # Accept either a raw targetId string or the dict returned by current_tab() / list_tabs().
     target_id = (target.get("targetId") or target.get("target_id")) if isinstance(target, dict) else target
     # Unmark old tab. Horse emoji is a surrogate pair in JS UTF-16 strings (2 code units),
     # plus the trailing space = 3 code units, so slice(3) cleanly removes the prefix.
     try: cdp("Runtime.evaluate", expression="if(document.title.startsWith('\U0001F434 '))document.title=document.title.slice(3)")
     except Exception: pass
-    cdp("Target.activateTarget", targetId=target_id)
     sid = cdp("Target.attachToTarget", targetId=target_id, flatten=True)["sessionId"]
     _send({"meta": "set_session", "session_id": sid, "target_id": target_id})
     _mark_tab()
     return sid
 
-def new_tab(url="about:blank"):
-    # Always create blank, then goto: passing url to createTarget races with
-    # attach, so the brief about:blank is "complete" by the time the caller
-    # polls and wait_for_load() returns before navigation actually starts.
-    if url != "about:blank":
-        try:
-            cur = current_tab()
-            cur_url = cur.get("url") or ""
-            if cur_url in ("", "about:blank") or cur_url.startswith("about:blank#"):
-                goto_url(url)
-                return cur.get("targetId") or cur.get("target_id")
-        except Exception:
-            pass
-    tid = cdp("Target.createTarget", url="about:blank")["targetId"]
-    switch_tab(tid)
-    if url != "about:blank":
+def switch_tab(target):
+    """Compatibility name for attach_tab(); never activates or focuses the window."""
+    return attach_tab(target)
+
+def _new_page(url, new_window=False):
+    # Create in the background so Chrome does not focus or raise its window on
+    # Linux, macOS, or Windows. Always create blank, then navigate: passing the
+    # final URL to createTarget races with attachment and load detection.
+    initial_url = BACKGROUND_WINDOW_URL if new_window else "about:blank"
+    params = {"url": initial_url, "background": True, "focus": False}
+    if new_window:
+        params["newWindow"] = True
+    tid = cdp("Target.createTarget", **params)["targetId"]
+    attach_tab(tid)
+    if new_window or url != "about:blank":
         goto_url(url)
     return tid
+
+def new_tab(url="about:blank"):
+    """Create and attach to a background tab without focusing Chrome."""
+    return _new_page(url)
+
+def new_window(url="about:blank"):
+    """Create and attach to a background browser window without focusing it."""
+    return _new_page(url, new_window=True)
 
 def close_tab(target=None):
     """Close a tab. If `target` is omitted, closes the currently attached tab.

@@ -368,7 +368,6 @@ def ensure_daemon(wait=60.0, name=None, env=None):
                 "permission-blocked: wait for the user to click Allow in the Chrome permission popup before retrying."
             )
         if local and attempt == 0 and _needs_chrome_remote_debugging_prompt(msg):
-            _open_chrome_inspect()
             print('browser-harness: at chrome://inspect/#remote-debugging, tick "Allow remote debugging for this browser instance" and click Allow on the popup that appears', file=sys.stderr)
             restart_daemon(name)
             continue
@@ -491,30 +490,10 @@ def _cdp_ws_from_url(cdp_url):
     return json.loads(urllib.request.urlopen(f"{cdp_url}/json/version", timeout=15).read())["webSocketDebuggerUrl"]
 
 
-def _has_local_gui():
-    """True when this machine plausibly has a browser we can open. False on headless servers."""
-    import platform
-    system = platform.system()
-    if system in ("Darwin", "Windows"):
-        return True
-    if system == "Linux":
-        return bool(os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY"))
-    return False
-
-
 def _show_live_url(url):
-    """Print liveUrl and auto-open it locally if there's a GUI."""
-    import sys, webbrowser
-    if not url: return
-    print(url)
-    if not _has_local_gui():
-        print("(no local GUI — share the liveUrl with the user)", file=sys.stderr)
-        return
-    try:
-        webbrowser.open(url, new=2)
-        print("(opened liveUrl in your default browser)", file=sys.stderr)
-    except Exception as e:
-        print(f"(couldn't auto-open: {e} — share the liveUrl with the user)", file=sys.stderr)
+    """Print liveUrl without opening or focusing a local browser window."""
+    if url:
+        print(url)
 
 
 def list_cloud_profiles():
@@ -568,8 +547,8 @@ def start_remote_daemon(name="remote", profileName=None, **create_kwargs):
       customProxy      — {host, port, username, password, ignoreCertErrors}.
       browserScreenWidth / browserScreenHeight, allowResizing, enableRecording.
 
-    Returns the full browser dict including `liveUrl`. Prints the liveUrl and
-    auto-opens it locally when a GUI is detected, so the user can watch along."""
+    Returns the full browser dict including `liveUrl` and prints that URL
+    without opening or focusing a local browser window."""
     if daemon_alive(name):
         raise RuntimeError(f"daemon {name!r} already alive -- restart_daemon({name!r}) first")
     if profileName:
@@ -756,26 +735,6 @@ def _chrome_running():
         return any(n.lower() in out.lower() for n in names)
     except Exception:
         return False
-
-
-def _open_chrome_inspect():
-    """Open chrome://inspect/#remote-debugging so the user can tick the checkbox."""
-    import platform, subprocess, webbrowser
-    url = "chrome://inspect/#remote-debugging"
-    if platform.system() == "Darwin":
-        try:
-            subprocess.run([
-                "osascript",
-                "-e", 'tell application "Google Chrome" to activate',
-                "-e", f'tell application "Google Chrome" to open location "{url}"',
-            ], timeout=5, check=False)
-            return
-        except Exception:
-            pass
-    try:
-        webbrowser.open(url, new=2)
-    except Exception:
-        pass
 
 
 def run_doctor():

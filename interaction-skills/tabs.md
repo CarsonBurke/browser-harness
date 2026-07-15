@@ -5,19 +5,17 @@ Use **CDP for control**, **UI automation for user-visible order**.
 ## Pure CDP (portable: macOS / Linux / Windows)
 
 ```python
-tabs = list_tabs()                    # includes chrome:// pages too
+tabs = list_tabs()                         # includes chrome:// pages too
 real_tabs = list_tabs(include_chrome=False)
-tid = new_tab("https://example.com")  # create + attach
-switch_tab(tid)                       # attach harness to tab
-cdp("Target.activateTarget", targetId=tid)  # show it in Chrome
+tid = new_window("https://example.com")    # background window + attach
+attach_tab(tid)                            # attach without focusing
 print(current_tab())
 print(page_info())
 ```
 
 What CDP is good at:
 - attach to a tab
-- open a tab
-- activate a known target
+- open a tab or window in the background
 - inspect URL/title/viewport
 - capture the attached tab's screenshot even if another tab is visibly frontmost
 
@@ -41,17 +39,10 @@ tell application "Google Chrome"
 end tell
 ```
 
-```applescript
-tell application "Google Chrome"
-  set active tab index of front window to 2
-  activate
-end tell
-```
-
 ### Linux
 
 No AppleScript. Same split still applies:
-- use CDP for `new_tab`, attach, inspect, activate known targets
+- use CDP for background window/tab creation, attachment, and inspection
 - use window-manager / browser UI automation when the user means visible order
 
 Typical tools:
@@ -61,8 +52,9 @@ Typical tools:
 
 ## Rules that held up in practice
 
-- `switch_tab()` is **not enough** if the user expects Chrome to visibly change.
-- `Target.activateTarget` is the CDP-side "show this tab".
+- `attach_tab()` and its compatibility alias `switch_tab()` never focus or raise a browser window.
+- `new_tab()` stays in the background but Chrome may place it in an existing user window. Use `new_window()` for isolated agent work.
+- Never call `Target.activateTarget` or platform activation APIs. If the user wants to see the window, let them select it themselves.
 - `list_tabs()` includes `chrome://newtab/` by default; ask for `include_chrome=False` when you want only real pages.
 - `chrome://omnibox-popup.top-chrome/` can appear as a fake page target; ignore it for user-facing tab lists.
 - If a page has `w=0 h=0`, you may be attached to the wrong target or a non-window surface.
